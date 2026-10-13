@@ -41,3 +41,14 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
   .btn-primary,.btn-secondary{min-height:44px}
   .assistant-card{padding:17px 14px}
 }
+.history-actions{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.history-actions .form-message{margin:0}
+.attendance-row-select,#riwayat-select-all{width:20px;height:20px;accent-color:var(--brand);cursor:pointer}
+.history-actions .table-action{min-height:42px;padding:8px 14px}
+@media(max-width:600px){
+  #tab-input .form-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
+  #tab-input .form-row label{width:100%;min-width:0;white-space:nowrap}
+  #tab-input .form-row input,#tab-input .form-row select{width:100%;min-width:0}
+  .history-actions{align-items:stretch;flex-direction:column}
+  .history-actions .table-action{width:100%}
+}

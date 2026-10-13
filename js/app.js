@@ -383,17 +383,59 @@ function renderDashboard() {
 
 function renderRiwayat() {
   const group = document.getElementById("r-kelompok").value;
-  const records = [...presensiData]
-    .filter((record) => !group || record.kelompok === group)
-    .sort((a, b) => b.tanggal.localeCompare(a.tanggal) || a.nama.localeCompare(b.nama));
-  document.getElementById("riwayat-table").innerHTML = records.map((record) => `
+  const records = presensiData
+    .map((record, index) => ({ record, index }))
+    .filter(({ record }) => !group || record.kelompok === group)
+    .sort((a, b) => b.record.tanggal.localeCompare(a.record.tanggal)
+      || a.record.nama.localeCompare(b.record.nama));
+  document.getElementById("riwayat-table").innerHTML = records.map(({ record, index }) => `
     <tr>
+      <td><input class="attendance-row-select" type="checkbox" value="${index}"
+        aria-label="Pilih presensi ${escapeHtml(record.nama)} tanggal ${escapeHtml(record.tanggal)}"
+        onchange="updateAttendanceSelection()"></td>
       <td>${escapeHtml(record.tanggal)}</td>
       <td>${escapeHtml(record.nama)}</td>
       <td>${escapeHtml(record.kelompok)}</td>
       <td>${escapeHtml(record.status)}</td>
       <td>${escapeHtml(record.metode)}</td>
-    </tr>`).join("") || '<tr><td colspan="5">Belum ada riwayat presensi.</td></tr>';
+    </tr>`).join("") || '<tr><td colspan="6">Belum ada riwayat presensi.</td></tr>';
+  document.getElementById("riwayat-select-all").checked = false;
+  document.getElementById("riwayat-select-all").indeterminate = false;
+  updateAttendanceSelection();
+}
+
+function updateAttendanceSelection() {
+  const checkboxes = [...document.querySelectorAll("#riwayat-table .attendance-row-select")];
+  const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+  const selectAll = document.getElementById("riwayat-select-all");
+  selectAll.checked = checkboxes.length > 0 && selectedCount === checkboxes.length;
+  selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+  const deleteButton = document.getElementById("delete-selected-attendance");
+  deleteButton.disabled = selectedCount === 0;
+  deleteButton.textContent = `Hapus dipilih (${selectedCount})`;
+}
+
+function toggleAllAttendanceSelection(checked) {
+  document.querySelectorAll("#riwayat-table .attendance-row-select")
+    .forEach((checkbox) => { checkbox.checked = checked; });
+  updateAttendanceSelection();
+}
+
+function deleteSelectedAttendance() {
+  const selectedIndices = new Set(
+    [...document.querySelectorAll("#riwayat-table .attendance-row-select:checked")]
+      .map((checkbox) => Number(checkbox.value))
+  );
+  if (!selectedIndices.size) return;
+  if (!window.confirm(`Hapus ${selectedIndices.size} catatan presensi yang dipilih?`)) return;
+
+  presensiData = presensiData.filter((_, index) => !selectedIndices.has(index));
+  saveAttendance();
+  const message = document.getElementById("riwayat-delete-message");
+  message.textContent = `${selectedIndices.size} catatan presensi berhasil dihapus.`;
+  message.className = "form-message success-message";
+  renderRiwayat();
+  renderDashboard();
 }
 
 function renderJamaah() {
@@ -580,6 +622,7 @@ async function stopBarcodeScanner() {
 }
 
 function handleBarcodeScan(value) {
+  document.getElementById("p-metode").value = "Barcode";
   const barcodeId = String(value).trim().replace(/^BHM:/i, "");
   const member = jamaahData.find((item) => item.id === barcodeId);
   if (!member) {

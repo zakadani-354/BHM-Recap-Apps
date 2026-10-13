@@ -195,8 +195,17 @@
       </label>
       <button class="btn-secondary" onclick="exportRiwayat()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
     </div>
+    <div class="history-actions">
+      <button id="delete-selected-attendance" class="table-action" type="button"
+        onclick="deleteSelectedAttendance()" disabled>Hapus dipilih (0)</button>
+      <p id="riwayat-delete-message" class="form-message" role="status"></p>
+    </div>
     <table class="data-table">
-      <thead><tr><th>Tanggal</th><th>Nama</th><th>Kelompok</th><th>Status</th><th>Metode</th></tr></thead>
+      <thead><tr>
+        <th><input id="riwayat-select-all" type="checkbox" aria-label="Pilih semua presensi yang tampil"
+          onchange="toggleAllAttendanceSelection(this.checked)"></th>
+        <th>Tanggal</th><th>Nama</th><th>Kelompok</th><th>Status</th><th>Metode</th>
+      </tr></thead>
       <tbody id="riwayat-table"></tbody>
     </table>
   </div>
@@ -309,4 +318,3 @@
 <script src="js/app.js"></script>
 </body>
 </html>
-
