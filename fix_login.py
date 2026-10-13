@@ -1,0 +1,9 @@
+with open('index.html','r',encoding='utf-8') as f: html=f.read()
+if 'view-login' not in html:
+    login = '''<section id="view-login" style="position:fixed;inset:0;z-index:999;background:linear-gradient(135deg,#064e3b,#059669);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;"><div style="background:#fff;border-radius:24px;padding:36px 28px;max-width:420px;width:100%;box-shadow:0 25px 50px rgba(6,78,59,.35);text-align:center;"><div style="width:80px;height:80px;margin:0 auto 14px;background:linear-gradient(135deg,#059669,#064e3b);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#fff;"><i class="fa-solid fa-mosque"></i></div><h1 style="font-size:22px;font-weight:800;color:#064e3b;letter-spacing:-.02em;margin-bottom:4px;">BHM Recap Apps</h1><p style="color:#64748b;font-size:14px;margin-bottom:20px;">Masuk untuk mengelola presensi</p><form onsubmit="event.preventDefault(); doLogin();" style="display:flex;flex-direction:column;gap:12px;"><input type="text" id="name" placeholder="Username" required style="padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;"><select id="role" style="padding:12px 14px;border-radius:10px;border:1.5px solid #e2e8f0;font-size:14px;"><option value="admin">Admin (Full Akses)</option><option value="pengurus">Pengurus (Lihat & Download)</option></select><button type="submit" style="padding:12px;border-radius:10px;border:none;background:linear-gradient(135deg,#059669,#047857);color:#fff;font-weight:700;font-size:15px;cursor:pointer;">Masuk</button></form></div></section>'''
+    html = html.replace('<body>', '<body>\n'+login)
+    html = html.replace('id="main-header"', 'id="main-header" style="display:none;"')
+    with open('index.html','w',encoding='utf-8') as f: f.write(html)
+    print('Login ditambahkan')
+else:
+    print('Login sudah ada')

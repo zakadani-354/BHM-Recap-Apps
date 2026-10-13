@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BHM Recap Apps</title>
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<section id="view-login" class="login-screen">
+  <div class="login-card">
+    <img class="login-logo" src="logo.png" alt="Logo Yayasan Baitussalam Huda Mansurin">
+    <p class="eyebrow">Yayasan Baitussalam Huda Mansurin</p>
+    <h1>BHM Recap Apps</h1>
+    <p class="login-copy">Sistem rekap presensi kelompok binaan</p>
+    <form onsubmit="event.preventDefault(); doLogin();" class="login-form">
+      <label for="name">Username</label>
+      <input id="name" name="username" type="text" placeholder="Masukkan username" autocomplete="username" required>
+      <label for="pass">Password</label>
+      <input id="pass" name="password" type="password" placeholder="Masukkan password" autocomplete="current-password" required>
+      <button class="btn-primary login-button" type="submit">Masuk ke Sistem <i class="fa-solid fa-arrow-right-to-bracket"></i></button>
+      <p id="login-error" class="form-message error-message hidden" role="alert"></p>
+    </form>
+    <p class="login-footnote">Enam kelompok binaan · Baitu Taqwa · Almansurin · Al Huda · Al Malik · Miftahul Jannah · Baitul Makmur</p>
+  </div>
+</section>
+
+<header class="topbar" id="main-header" style="display:none">
+  <div class="container topbar-inner">
+    <div class="logo-area"><img class="brand-logo" src="logo.png" alt="Logo Yayasan Baitussalam Huda Mansurin"> <span>BHM Recap Apps</span></div>
+    <nav class="nav-links">
+      <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard')">Dashboard</a>
+      <a href="#presensi" class="nav-link" onclick="showPage('presensi')">Presensi</a>
+      <a href="#jamaah" class="nav-link" onclick="showPage('jamaah')">Manajemen Jamaah</a>
+      <a href="#asisten" class="nav-link" onclick="showPage('asisten')">Asisten AI</a>
+      <a href="#admin" id="nav-admin" class="nav-link hidden" onclick="showPage('admin')">Menu Admin</a>
+    </nav>
+    <div class="account-tools"><span id="current-user"></span><button class="btn-logout" type="button" onclick="logoutApp()">Keluar</button></div>
+  </div>
+</header>
+
+<main class="container hidden" id="app">
+
+<!-- DASHBOARD -->
+<section id="page-dashboard" class="page">
+  <h1>Dashboard <span class="subtitle">Resume Presensi per Bulan per Kelompok</span></h1>
+
+  <div class="filter-row">
+    <label>Bulan: <input type="month" id="f-bulan" onchange="renderDashboard()"></label>
+    <label>Jenis Kelamin:
+      <select id="f-gender" onchange="renderDashboard()">
+        <option value="">Semua</option>
+        <option value="Pria">Pria</option>
+        <option value="Wanita">Wanita</option>
+      </select>
+    </label>
+    <label>Kelompok:
+      <select id="f-group" onchange="renderDashboard()">
+        <option value="">Semua Kelompok</option>
+        <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+        <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+      </select>
+    </label>
+    <label>Tingkat Kehadiran:
+      <select id="f-tingkat" onchange="renderDashboard()">
+        <option value="0">0%</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="cards" id="dashboard-cards"></div>
+
+  <section class="chart-panel" aria-labelledby="attendance-chart-title">
+    <div class="chart-heading">
+      <h2 id="attendance-chart-title">Diagram Kehadiran per Kelompok</h2>
+      <span>Presensi bulan terpilih</span>
+    </div>
+    <div class="dashboard-charts">
+      <div class="chart-column">
+        <h3>Persentase Hadir</h3>
+        <div id="attendance-chart" class="attendance-chart" role="img" aria-label="Diagram batang rata-rata kehadiran tiap kelompok"></div>
+      </div>
+      <div class="chart-column">
+        <h3>Rincian Status</h3>
+        <div id="status-donut" class="donut-layout"></div>
+      </div>
+    </div>
+  </section>
+
+  <p class="section-help dashboard-note">Persentase dihitung dari catatan presensi pada bulan terpilih. Jamaah tanpa catatan pada bulan tersebut dihitung 0%; 100% berarti semua catatannya berstatus Hadir.</p>
+  <h3>Jumlah Jamaah dengan Tingkat Kehadiran 0% per Kelompok</h3>
+  <table class="data-table">
+    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah 0%</th></tr></thead>
+    <tbody id="dash-zero-table"></tbody>
+  </table>
+  <h3 class="dashboard-subheading">Jumlah Jamaah dengan Tingkat Kehadiran 100% per Kelompok</h3>
+  <table class="data-table">
+    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah 100%</th></tr></thead>
+    <tbody id="dash-full-table"></tbody>
+  </table>
+</section>
+
+<!-- PRESENSI -->
+<section id="page-presensi" class="page hidden">
+  <h1>Presensi</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('input')">Form Input</button>
+    <button class="tab" onclick="switchTab('riwayat')">Riwayat Input</button>
+  </div>
+
+  <div id="tab-input">
+    <h2>Form Input Presensi</h2>
+    <form onsubmit="event.preventDefault(); addPresensi();" class="form-box">
+      <div class="form-row">
+        <label>Kelompok
+          <select id="p-kelompok" required onchange="updateAttendanceMemberOptions()">
+            <option value="">Pilih...</option>
+            <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+            <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+          </select>
+        </label>
+        <label>Jenis Kelamin
+          <select id="p-gender" required onchange="updateAttendanceMemberOptions()">
+            <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
+            <option value="Tidak diatur">Tidak diatur (data lama)</option>
+          </select>
+        </label>
+        <label>Peran
+          <select id="p-peran" required onchange="updateAttendanceMemberOptions()">
+            <option value="">Pilih...</option><option>Jamaah</option><option>Pengurus</option>
+          </select>
+        </label>
+        <label>Nama
+          <select id="p-nama" required disabled>
+            <option value="">Pilih kelompok, jenis kelamin, dan peran...</option>
+          </select>
+        </label>
+        <label>Tanggal <input type="date" id="p-tanggal" required></label>
+      </div>
+      <div class="form-row">
+        <label>Status
+          <select id="p-status" required>
+            <option value="">Pilih status...</option>
+            <option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option>
+          </select>
+        </label>
+      </div>
+      <div class="form-row">
+        <label>Metode Input
+          <select id="p-metode"><option value="Satuan">Satuan</option><option value="Barcode">Barcode</option></select>
+        </label>
+      </div>
+      <section class="scanner-box" aria-labelledby="barcode-scan-title">
+        <h3 id="barcode-scan-title">Input Presensi dengan Barcode</h3>
+        <p class="section-help">Pilih kelompok, lalu buka pemindai. Hasil pindai memilih jamaah; tentukan status sebelum menyimpan.</p>
+        <div class="scanner-controls">
+          <button id="start-scanner" class="btn-secondary" type="button" onclick="startBarcodeScanner()">Buka Pemindai</button>
+          <button id="stop-scanner" class="btn-secondary hidden" type="button" onclick="stopBarcodeScanner()">Tutup Kamera</button>
+          <span id="scanner-message" class="form-message" role="status"></span>
+        </div>
+        <div id="barcode-scanner" class="barcode-scanner hidden"></div>
+      </section>
+      <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+    </form>
+
+    <section class="form-box import-box" aria-labelledby="attendance-import-title">
+      <h2 id="attendance-import-title">Input Presensi dari File atau Foto</h2>
+      <p class="section-help">Pilih kelompok dan tanggal di formulir di atas. CSV berisi kolom <code>Nama,Status</code>; status menerima H/I/S/A atau Hadir/Izin/Sakit/Alpa.</p>
+      <div class="import-controls">
+        <label>File CSV <input id="attendance-file" type="file" accept=".csv,.txt,text/csv"></label>
+        <button type="button" class="btn-secondary" onclick="importAttendanceFile()">Baca CSV</button>
+      </div>
+      <div class="import-controls">
+        <label>Foto daftar presensi <input id="attendance-photo" type="file" accept="image/*"></label>
+        <button type="button" class="btn-secondary" onclick="readAttendancePhoto()">Baca Foto (OCR)</button>
+      </div>
+      <label for="attendance-batch">Periksa dan koreksi hasil sebelum disimpan</label>
+      <textarea id="attendance-batch" rows="5" placeholder="Ahmad,H&#10;Siti,I"></textarea>
+      <button type="button" class="btn-primary" onclick="addBatchPresensi()">Simpan Presensi Massal</button>
+      <p id="attendance-import-message" class="form-message" role="status"></p>
+    </section>
+  </div>
+
+  <div id="tab-riwayat" class="hidden">
+    <h2>Riwayat Input</h2>
+    <div class="filter-row">
+      <label>Kelompok:
+        <select id="r-kelompok" onchange="renderRiwayat()">
+          <option value="">Semua</option>
+          <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+          <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+        </select>
+      </label>
+      <button class="btn-secondary" onclick="exportRiwayat()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Tanggal</th><th>Nama</th><th>Kelompok</th><th>Status</th><th>Metode</th></tr></thead>
+      <tbody id="riwayat-table"></tbody>
+    </table>
+  </div>
+</section>
+
+<!-- DATA JAMAAH -->
+<section id="page-jamaah" class="page hidden">
+  <h1>Data Jamaah & Pengurus</h1>
+  <div class="tabs">
+    <button class="tab active" onclick="switchJamaahTab('satuan')">Tambah Satuan</button>
+    <button class="tab" onclick="switchJamaahTab('file')">From File</button>
+  </div>
+
+  <div id="jamaah-satuan">
+    <form onsubmit="event.preventDefault(); addJamaah();" class="form-box">
+      <div class="form-row">
+        <label>Nama Lengkap <input type="text" id="j-nama" placeholder="Nama" required></label>
+        <label>Kelompok
+          <select id="j-kelompok" required>
+            <option value="">Pilih...</option>
+            <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+            <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+          </select>
+        </label>
+        <label>Jenis Kelamin
+          <select id="j-gender" required><option value="">Pilih...</option><option>Pria</option><option>Wanita</option></select>
+        </label>
+        <label>Peran
+          <select id="j-peran"><option>Jamaah</option><option>Pengurus</option></select>
+        </label>
+      </div>
+      <button type="submit" class="btn-primary"><i class="fa-solid fa-user-plus"></i> Tambah</button>
+    </form>
+    <table class="data-table">
+      <thead><tr><th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Peran</th><th>Aksi</th></tr></thead>
+      <tbody id="jamaah-table"></tbody>
+    </table>
+  </div>
+
+  <div id="jamaah-file" class="hidden">
+    <p>Paste data CSV (Nama,Kelompok,Jenis Kelamin,Peran). CSV lama Nama,Kelompok,Peran tetap didukung:</p>
+    <textarea id="file-paste" rows="4" placeholder="Ahmad,Baitu Taqwa,Pria,Jamaah"></textarea>
+    <div class="import-controls">
+      <label>File CSV <input id="jamaah-file-input" type="file" accept=".csv,.txt,text/csv"></label>
+      <button class="btn-secondary" onclick="importFileData()"><i class="fa-solid fa-file-import"></i> Import</button>
+    </div>
+    <p id="jamaah-import-message" class="form-message" role="status"></p>
+  </div>
+
+  <section class="form-box barcode-manager" aria-labelledby="barcode-manager-title">
+    <h2 id="barcode-manager-title">Barcode Jamaah</h2>
+    <p class="section-help">Pilih jamaah untuk membuat barcode QR berbentuk kotak. Nama jamaah dicetak di bawah barcode, yang dapat diunduh sebagai gambar PNG atau PDF.</p>
+    <div class="barcode-manager-controls">
+      <label for="barcode-member">Jamaah</label>
+      <select id="barcode-member" onchange="renderSelectedBarcode()">
+        <option value="">Pilih jamaah...</option>
+      </select>
+      <button class="btn-secondary" type="button" onclick="downloadBarcodeImage()">Unduh PNG</button>
+      <button class="btn-secondary" type="button" onclick="downloadBarcodePdf()">Unduh PDF</button>
+    </div>
+    <div id="barcode-preview" class="barcode-preview hidden">
+      <div id="member-qrcode" role="img" aria-label="QR code ID jamaah"></div>
+      <p id="barcode-member-caption"></p>
+    </div>
+    <p id="barcode-message" class="form-message" role="status"></p>
+  </section>
+</section>
+
+<!-- ASISTEN -->
+<section id="page-asisten" class="page hidden">
+  <h1>Asisten AI <span class="subtitle">Ringkasan lokal berdasarkan data presensi tersimpan</span></h1>
+  <div class="assistant-card">
+    <p>Asisten ini berjalan di perangkat Anda tanpa mengirim data ke layanan eksternal. Tanyakan ringkasan seperti “berapa yang hadir bulan ini?” atau “ringkasan Al Huda”.</p>
+    <form onsubmit="event.preventDefault(); askAssistant();" class="assistant-form">
+      <label class="sr-only" for="assistant-question">Pertanyaan</label>
+      <input id="assistant-question" type="text" placeholder="Tulis pertanyaan tentang presensi..." required>
+      <button class="btn-primary" type="submit">Tanya</button>
+    </form>
+    <div id="assistant-answer" class="assistant-answer" aria-live="polite">Data hanya diringkas dari catatan yang ada di browser ini.</div>
+  </div>
+</section>
+
+<!-- ADMIN -->
+<section id="page-admin" class="page hidden">
+  <h1>Menu Admin</h1>
+  <div class="form-box">
+    <h2>Ubah Password Akun</h2>
+    <p class="section-help">Password disimpan di penyimpanan browser ini. Fitur login lokal tidak menggantikan autentikasi server untuk aplikasi yang dipakai bersama.</p>
+    <form onsubmit="event.preventDefault(); changeAccountPassword();" class="password-form">
+      <label>Akun
+        <select id="account-username">
+          <option value="admin">Admin</option>
+          <option value="pengurus">Pengurus</option>
+        </select>
+      </label>
+      <label>Password baru <input id="new-password" type="password" minlength="4" autocomplete="new-password" required></label>
+      <label>Ulangi password baru <input id="confirm-password" type="password" minlength="4" autocomplete="new-password" required></label>
+      <button type="submit" class="btn-primary">Simpan Password</button>
+      <p id="password-message" class="form-message" role="status"></p>
+    </form>
+  </div>
+</section>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

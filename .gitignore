@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+build/
+coverage/
+.vercel/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# TypeScript and tooling
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
