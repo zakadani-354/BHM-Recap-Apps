@@ -33,6 +33,12 @@ let jamaahData = savedMembers.map((member) => {
 });
 let barcodeScanner = null;
 let attendanceBatchFileData = null;
+let sharedSyncEnabled = false;
+let sharedSyncQueue = Promise.resolve();
+let sharedSyncPending = 0;
+let sharedSyncBusy = false;
+let sharedDataRevision = 0;
+let sharedSyncTimer = null;
 window.currentRole = null;
 if (JSON.stringify(jamaahData) !== JSON.stringify(savedMembers)) {
   saveMembers();
@@ -103,10 +109,121 @@ function getAccounts() {
 
 function saveAttendance() {
   localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
+  queueSharedSave("attendance", presensiData);
 }
 
 function saveMembers() {
   localStorage.setItem(STORAGE_KEYS.members, JSON.stringify(jamaahData));
+  queueSharedSave("members", jamaahData);
+}
+
+async function requestSharedApi(action, data = {}, method = "POST") {
+  let response;
+  try {
+    response = await fetch("/api", {
+      method,
+      credentials: "same-origin",
+      headers: method === "POST" ? { "Content-Type": "application/json" } : undefined,
+      body: method === "POST" ? JSON.stringify({ action, ...data }) : undefined
+    });
+  } catch (error) {
+    throw new Error("Server sinkronisasi tidak dapat dijangkau. Periksa koneksi dan alamat hosting.");
+  }
+
+  let result;
+  try {
+    result = await response.json();
+  } catch (error) {
+    throw new Error("Server sinkronisasi memberi respons yang tidak valid.");
+  }
+  if (!response.ok) {
+    const failure = new Error(result.error || "Permintaan sinkronisasi gagal.");
+    failure.code = result.code || "SYNC_FAILED";
+    failure.status = response.status;
+    throw failure;
+  }
+  return result;
+}
+
+function setSyncStatus(text, state = "") {
+  const status = document.getElementById("sync-status");
+  if (!status) return;
+  status.textContent = text;
+  status.className = `sync-status${state ? ` ${state}` : ""}`;
+}
+
+function queueSharedSave(collection, data) {
+  if (!sharedSyncEnabled) return;
+  const snapshot = JSON.parse(JSON.stringify(data));
+  sharedSyncPending += 1;
+  sharedSyncQueue = sharedSyncQueue
+    .then(async () => {
+      const result = await requestSharedApi("save", { collection, data: snapshot });
+      sharedDataRevision = Math.max(sharedDataRevision, Number(result.revision || 0));
+      setSyncStatus("Data bersama tersinkron", "sync-online");
+    })
+    .catch((error) => {
+      console.error(`Could not sync shared ${collection}.`, error);
+      setSyncStatus(`Gagal sinkron: ${error.message}`, "sync-error");
+    })
+    .finally(() => {
+      sharedSyncPending -= 1;
+    });
+}
+
+function cacheSharedState(state) {
+  if (!Array.isArray(state.members) || !Array.isArray(state.attendance)) {
+    throw new Error("Data bersama dari server tidak memiliki format yang valid.");
+  }
+  jamaahData = state.members;
+  presensiData = state.attendance;
+  sharedDataRevision = Number(state.revision || 0);
+  localStorage.setItem(STORAGE_KEYS.members, JSON.stringify(jamaahData));
+  localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
+}
+
+async function loadSharedData(role, state = null) {
+  let remoteState = state || await requestSharedApi("", {}, "GET");
+  if (!remoteState.initialized && role !== "admin"
+      && (jamaahData.length || presensiData.length)) {
+    throw new Error("Data bersama belum diinisialisasi. Minta admin masuk terlebih dahulu dari perangkat yang menyimpan data awal.");
+  }
+  if (!remoteState.initialized && role === "admin"
+      && (jamaahData.length || presensiData.length)) {
+    await requestSharedApi("save", { collection: "members", data: jamaahData });
+    await requestSharedApi("save", { collection: "attendance", data: presensiData });
+    remoteState = await requestSharedApi("", {}, "GET");
+  }
+  cacheSharedState(remoteState);
+  renderDashboard();
+  renderRiwayat();
+  renderJamaah();
+  updateAttendanceMemberOptions();
+  setSyncStatus("Data bersama tersinkron", "sync-online");
+}
+
+async function refreshSharedData() {
+  if (!sharedSyncEnabled || sharedSyncBusy || sharedSyncPending) return;
+  sharedSyncBusy = true;
+  try {
+    const remoteState = await requestSharedApi("", {}, "GET");
+    if (remoteState.user?.role !== window.currentRole) {
+      throw new Error("Peran akun berubah. Keluar lalu masuk kembali.");
+    }
+    if (Number(remoteState.revision || 0) > sharedDataRevision) {
+      cacheSharedState(remoteState);
+      renderDashboard();
+      renderRiwayat();
+      renderJamaah();
+      updateAttendanceMemberOptions();
+    }
+    setSyncStatus("Data bersama tersinkron", "sync-online");
+  } catch (error) {
+    console.error("Could not refresh shared data.", error);
+    setSyncStatus(`Gagal sinkron: ${error.message}`, "sync-error");
+  } finally {
+    sharedSyncBusy = false;
+  }
 }
 
 function escapeHtml(value) {
@@ -226,6 +343,16 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   document.getElementById("current-user").textContent =
     `${username} · ${role === "admin" ? "Admin" : "Pengurus"}`;
   document.getElementById("nav-admin").classList.toggle("hidden", role !== "admin");
+  setSyncStatus(
+    sharedSyncEnabled ? "Data bersama tersinkron" : "Mode lokal — hanya perangkat ini",
+    sharedSyncEnabled ? "sync-online" : "sync-local"
+  );
+  if (sharedSyncTimer) clearInterval(sharedSyncTimer);
+  sharedSyncTimer = sharedSyncEnabled
+    ? setInterval(() => {
+      if (!document.hidden) refreshSharedData();
+    }, 30000)
+    : null;
 
   const isAdmin = role === "admin";
   document.querySelector("#page-jamaah .tabs").classList.toggle("hidden", !isAdmin);
@@ -242,7 +369,7 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   showPage(page === "admin" && !isAdmin ? "dashboard" : page);
 }
 
-function restoreActiveSession() {
+async function restoreActiveSession() {
   const stored = sessionStorage.getItem(SESSION_KEY);
   if (!stored) return;
   let activeSession;
@@ -258,10 +385,44 @@ function restoreActiveSession() {
     return;
   }
   const username = String(activeSession.username || "").toLowerCase();
-  const account = getAccounts()[username];
   const validPages = ["dashboard", "presensi", "jamaah", "asisten", "admin"];
-  if (!account || account.role !== activeSession.role
+  if (!["admin", "pengurus"].includes(username)
       || !validPages.includes(activeSession.page || "dashboard")) {
+    sessionStorage.removeItem(SESSION_KEY);
+    return;
+  }
+  if (activeSession.shared === true) {
+    try {
+      sharedSyncEnabled = true;
+      const remoteState = await requestSharedApi("", {}, "GET");
+      if (remoteState.user?.username !== username
+          || remoteState.user?.role !== activeSession.role) {
+        throw new Error("Identitas sesi tidak sesuai. Silakan masuk kembali.");
+      }
+      await loadSharedData(activeSession.role, remoteState);
+      openApp(
+        username,
+        activeSession.role,
+        activeSession.page || "dashboard",
+        activeSession.presensiTab || "input",
+        activeSession.jamaahTab || "satuan",
+        activeSession.attendanceMode || "satuan"
+      );
+    } catch (error) {
+      sharedSyncEnabled = false;
+      sessionStorage.removeItem(SESSION_KEY);
+      const message = document.getElementById("login-error");
+      message.textContent = `Sesi bersama tidak dapat dipulihkan: ${error.message}`;
+      message.classList.remove("hidden");
+    }
+    return;
+  }
+  if (window.location.protocol !== "file:") {
+    sessionStorage.removeItem(SESSION_KEY);
+    return;
+  }
+  const account = getAccounts()[username];
+  if (!account || account.role !== activeSession.role) {
     sessionStorage.removeItem(SESSION_KEY);
     return;
   }
@@ -275,31 +436,56 @@ function restoreActiveSession() {
   );
 }
 
-function doLogin() {
-  const username = document.getElementById("name").value.trim().toLowerCase();
-  const password = document.getElementById("pass").value;
-  const account = getAccounts()[username];
-  const error = document.getElementById("login-error");
-  if (!account || account.password !== password) {
-    error.textContent = "Username atau password salah.";
-    error.classList.remove("hidden");
-    return;
-  }
-
-  error.textContent = "";
-  error.classList.add("hidden");
+function finishLogin(username, role, shared) {
+  sharedSyncEnabled = shared;
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({
     username,
-    role: account.role,
+    role,
+    shared,
     page: "dashboard",
     presensiTab: "input",
     jamaahTab: "satuan",
     attendanceMode: "satuan"
   }));
-  openApp(username, account.role);
+  openApp(username, role);
 }
 
-function logoutApp() {
+async function doLogin() {
+  const username = document.getElementById("name").value.trim().toLowerCase();
+  const password = document.getElementById("pass").value;
+  const error = document.getElementById("login-error");
+  error.textContent = "";
+  error.classList.add("hidden");
+
+  if (window.location.protocol === "file:") {
+    const account = getAccounts()[username];
+    if (!account || account.password !== password) {
+      error.textContent = "Username atau password salah.";
+      error.classList.remove("hidden");
+      return;
+    }
+    finishLogin(username, account.role, false);
+    return;
+  }
+
+  try {
+    const credentials = await requestSharedApi("login", { username, password });
+    sharedSyncEnabled = true;
+    await loadSharedData(credentials.role);
+    finishLogin(credentials.username, credentials.role, true);
+  } catch (loginError) {
+    sharedSyncEnabled = false;
+    error.textContent = loginError.message;
+    error.classList.remove("hidden");
+  }
+}
+
+async function logoutApp() {
+  const wasSharedSession = sharedSyncEnabled;
+  const pendingSync = sharedSyncQueue;
+  sharedSyncEnabled = false;
+  if (sharedSyncTimer) clearInterval(sharedSyncTimer);
+  sharedSyncTimer = null;
   sessionStorage.removeItem(SESSION_KEY);
   window.currentRole = null;
   document.getElementById("pass").value = "";
@@ -308,6 +494,14 @@ function logoutApp() {
   document.getElementById("view-login").classList.remove("hidden");
   document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
   document.getElementById("page-dashboard").classList.remove("hidden");
+  if (wasSharedSession) {
+    try {
+      await pendingSync;
+      await requestSharedApi("logout");
+    } catch (error) {
+      console.error("Could not clear the shared session cookie.", error);
+    }
+  }
 }
 
 function memberForRecord(record) {
@@ -320,9 +514,12 @@ function isInGenderFilter(member, selectedGender) {
   return !selectedGender || member?.jenisKelamin === selectedGender;
 }
 
-function dashboardRecordsForMonth(month, selectedGroup) {
-  const records = presensiData.filter((record) => record.tanggal.startsWith(month)
-    && (!selectedGroup || record.kelompok === selectedGroup));
+function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup) {
+  const records = presensiData.filter((record) => {
+    const recordMonth = record.tanggal.slice(0, 7);
+    return recordMonth >= startMonth && recordMonth <= endMonth
+      && (!selectedGroup || record.kelompok === selectedGroup);
+  });
   const sessionMembers = new Map();
   records.forEach((record) => {
     const sessionKey = `${record.kelompok}\u0000${record.tanggal}`;
@@ -352,11 +549,12 @@ function dashboardRecordsForMonth(month, selectedGroup) {
   return [...records, ...automaticAlpa];
 }
 
-function selectedMonthRecords() {
-  const month = document.getElementById("f-bulan").value || currentMonth();
+function selectedPeriodRecords() {
+  const startMonth = document.getElementById("f-bulan-mulai").value || currentMonth();
+  const endMonth = document.getElementById("f-bulan-sampai").value || currentMonth();
   const selectedGender = document.getElementById("f-gender").value;
   const selectedGroup = document.getElementById("f-group").value;
-  const allMonthRecords = dashboardRecordsForMonth(month, selectedGroup);
+  const allMonthRecords = dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup);
   const monthRecords = allMonthRecords.filter((record) =>
     isInGenderFilter(memberForRecord(record), selectedGender));
   const groups = (selectedGroup ? [selectedGroup] : GROUPS).map((group) => {
@@ -381,10 +579,24 @@ function selectedMonthRecords() {
     visibleGroups: groups.filter((item) => item.percentage >= minimumPercentage),
     monthRecords,
     allMonthRecords,
-    month,
+    startMonth,
+    endMonth,
     selectedGender,
     selectedGroup
   };
+}
+
+function dashboardPeriodChanged(changedInput) {
+  const startInput = document.getElementById("f-bulan-mulai");
+  const endInput = document.getElementById("f-bulan-sampai");
+  if (startInput.value && endInput.value && startInput.value > endInput.value) {
+    if (changedInput === "start") {
+      endInput.value = startInput.value;
+    } else {
+      startInput.value = endInput.value;
+    }
+  }
+  renderDashboard();
 }
 
 function renderStatusDonut(records) {
@@ -418,7 +630,7 @@ function renderStatusDonut(records) {
 }
 
 function renderDashboard() {
-  const { groups, visibleGroups, monthRecords, allMonthRecords, month } = selectedMonthRecords();
+  const { groups, visibleGroups, monthRecords, allMonthRecords, startMonth, endMonth } = selectedPeriodRecords();
   const visibleGroupNames = new Set(visibleGroups.map((item) => item.group));
   const filteredRecords = monthRecords.filter((record) => visibleGroupNames.has(record.kelompok));
   const hadir = filteredRecords.filter((record) => record.status === "Hadir").length;
@@ -443,7 +655,7 @@ function renderDashboard() {
     }).join("") || '<tr><td colspan="2">Tidak ada kelompok pada filter ini.</td></tr>';
 
   document.getElementById("dashboard-cards").innerHTML = [
-    ["Total Presensi", filteredRecords.length, `Bulan ${month}`],
+    ["Total Presensi", filteredRecords.length, `Periode ${startMonth} s.d. ${endMonth}`],
     ["Hadir", hadir, `${filteredRecords.length ? Math.round(hadir / filteredRecords.length * 100) : 0}% dari presensi`],
     ["Jamaah Terdaftar", memberStats.length, "Sesuai filter"],
     ["Pria Hadir", genderCount("Pria"), "Data presensi"],
@@ -1411,7 +1623,7 @@ function askAssistant() {
   document.getElementById("assistant-answer").textContent = answer;
 }
 
-function changeAccountPassword() {
+async function changeAccountPassword() {
   const message = document.getElementById("password-message");
   if (window.currentRole !== "admin") {
     message.textContent = "Hanya admin yang dapat mengubah password.";
@@ -1437,20 +1649,39 @@ function changeAccountPassword() {
     message.className = "form-message error-message";
     return;
   }
+  if (sharedSyncEnabled) {
+    try {
+      await requestSharedApi("change-password", { username, password });
+    } catch (error) {
+      message.textContent = `Password tidak berhasil disimpan bersama: ${error.message}`;
+      message.className = "form-message error-message";
+      return;
+    }
+  }
   accounts[username].password = password;
   localStorage.setItem(STORAGE_KEYS.accounts, JSON.stringify(accounts));
   document.getElementById("new-password").value = "";
   document.getElementById("confirm-password").value = "";
-  message.textContent = `Password akun ${username} berhasil diubah pada browser ini.`;
+  message.textContent = sharedSyncEnabled
+    ? `Password akun ${username} berhasil diubah untuk semua perangkat.`
+    : `Password akun ${username} berhasil diubah pada browser ini.`;
   message.className = "form-message success-message";
 }
 
-document.getElementById("f-bulan").value = currentMonth();
+document.getElementById("f-bulan-mulai").value = currentMonth();
+document.getElementById("f-bulan-sampai").value = currentMonth();
 document.getElementById("p-tanggal").value = localDateString();
 document.getElementById("batch-date").value = localDateString();
-document.getElementById("f-bulan").addEventListener("change", renderDashboard);
 document.getElementById("f-tingkat").addEventListener("change", renderDashboard);
+window.addEventListener("focus", () => {
+  if (sharedSyncEnabled) refreshSharedData();
+});
 renderDashboard();
 renderRiwayat();
 renderJamaah();
-restoreActiveSession();
+restoreActiveSession().catch((error) => {
+  console.error("Could not restore the active session.", error);
+  const message = document.getElementById("login-error");
+  message.textContent = `Sesi tidak dapat dipulihkan: ${error.message}`;
+  message.classList.remove("hidden");
+});
