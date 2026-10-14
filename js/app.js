@@ -278,7 +278,6 @@ function showPage(id) {
   });
   updateActiveSession({ page: id });
   window.scrollTo(0, 0);
-  if (id === "dashboard") renderDashboard();
   if (id === "presensi") renderRiwayat();
   if (id === "jamaah") renderJamaah();
 }
@@ -514,7 +513,29 @@ function isInGenderFilter(member, selectedGender) {
   return !selectedGender || member?.jenisKelamin === selectedGender;
 }
 
-function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup) {
+function createDashboardMemberLookup() {
+  const byId = new Map();
+  const byNameAndGroup = new Map();
+  const membersByGroup = new Map();
+  jamaahData.forEach((member) => {
+    if (!byId.has(member.id)) byId.set(member.id, member);
+    const nameKey = `${member.nama.toLowerCase()}\u0000${member.kelompok}`;
+    if (!byNameAndGroup.has(nameKey)) byNameAndGroup.set(nameKey, member);
+    if (member.peran.toLowerCase() === "jamaah") {
+      if (!membersByGroup.has(member.kelompok)) membersByGroup.set(member.kelompok, []);
+      membersByGroup.get(member.kelompok).push(member);
+    }
+  });
+  return {
+    membersByGroup,
+    find(record) {
+      return byId.get(record.memberId)
+        || byNameAndGroup.get(`${record.nama.toLowerCase()}\u0000${record.kelompok}`);
+    }
+  };
+}
+
+function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup) {
   const records = presensiData.filter((record) => {
     const recordMonth = record.tanggal.slice(0, 7);
     return recordMonth >= startMonth && recordMonth <= endMonth
@@ -523,28 +544,31 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup) {
   const sessionMembers = new Map();
   records.forEach((record) => {
     const sessionKey = `${record.kelompok}\u0000${record.tanggal}`;
-    if (!sessionMembers.has(sessionKey)) sessionMembers.set(sessionKey, new Set());
-    const member = memberForRecord(record);
-    if (member) sessionMembers.get(sessionKey).add(member.id);
+    if (!sessionMembers.has(sessionKey)) {
+      sessionMembers.set(sessionKey, {
+        group: record.kelompok,
+        date: record.tanggal,
+        attendedMemberIds: new Set()
+      });
+    }
+    const member = memberLookup.find(record);
+    if (member) sessionMembers.get(sessionKey).attendedMemberIds.add(member.id);
   });
 
   const automaticAlpa = [];
-  sessionMembers.forEach((attendedMemberIds, sessionKey) => {
-    const [group, date] = sessionKey.split("\u0000");
-    jamaahData
-      .filter((member) => member.peran.toLowerCase() === "jamaah" && member.kelompok === group)
-      .forEach((member) => {
-        if (!attendedMemberIds.has(member.id)) {
-          automaticAlpa.push({
-            memberId: member.id,
-            nama: member.nama,
-            kelompok: member.kelompok,
-            tanggal: date,
-            status: "Alpa",
-            metode: "Otomatis"
-          });
-        }
-      });
+  sessionMembers.forEach(({ group, date, attendedMemberIds }) => {
+    (memberLookup.membersByGroup.get(group) || []).forEach((member) => {
+      if (!attendedMemberIds.has(member.id)) {
+        automaticAlpa.push({
+          memberId: member.id,
+          nama: member.nama,
+          kelompok: member.kelompok,
+          tanggal: date,
+          status: "Alpa",
+          metode: "Otomatis"
+        });
+      }
+    });
   });
   return [...records, ...automaticAlpa];
 }
@@ -554,13 +578,24 @@ function selectedPeriodRecords() {
   const endMonth = document.getElementById("f-bulan-sampai").value || currentMonth();
   const selectedGender = document.getElementById("f-gender").value;
   const selectedGroup = document.getElementById("f-group").value;
-  const allMonthRecords = dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup);
+  const memberLookup = createDashboardMemberLookup();
+  const allMonthRecords = dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup);
   const monthRecords = allMonthRecords.filter((record) =>
-    isInGenderFilter(memberForRecord(record), selectedGender));
+    isInGenderFilter(memberLookup.find(record), selectedGender));
+  const groupRecords = new Map();
+  monthRecords.forEach((record) => {
+    if (!groupRecords.has(record.kelompok)) {
+      groupRecords.set(record.kelompok, { records: [], present: 0 });
+    }
+    const group = groupRecords.get(record.kelompok);
+    group.records.push(record);
+    if (record.status === "Hadir") group.present += 1;
+  });
   const groups = (selectedGroup ? [selectedGroup] : GROUPS).map((group) => {
-    const records = monthRecords.filter((record) => record.kelompok === group);
+    const summary = groupRecords.get(group);
+    const records = summary?.records || [];
     const rate = records.length
-      ? records.filter((record) => record.status === "Hadir").length / records.length
+      ? summary.present / records.length
       : 0;
     return { group, records, rate, percentage: Math.round(rate * 100) };
   });
@@ -582,7 +617,8 @@ function selectedPeriodRecords() {
     startMonth,
     endMonth,
     selectedGender,
-    selectedGroup
+    selectedGroup,
+    memberLookup
   };
 }
 
@@ -605,10 +641,12 @@ function renderStatusDonut(records) {
     { label: "Izin", color: "#3b82f6" },
     { label: "Sakit", color: "#f59e0b" },
     { label: "Alpa", display: "Alpha", color: "#ef4444" }
-  ].map((item) => ({
-    ...item,
-    count: records.filter((record) => record.status === item.label).length
-  }));
+  ];
+  const counts = new Map(statuses.map((item) => [item.label, 0]));
+  records.forEach((record) => {
+    if (counts.has(record.status)) counts.set(record.status, counts.get(record.status) + 1);
+  });
+  statuses.forEach((item) => { item.count = counts.get(item.label); });
   const total = statuses.reduce((sum, item) => sum + item.count, 0);
   let stop = 0;
   const segments = statuses.map((item) => {
@@ -630,36 +668,65 @@ function renderStatusDonut(records) {
 }
 
 function renderDashboard() {
-  const { groups, visibleGroups, monthRecords, allMonthRecords, startMonth, endMonth } = selectedPeriodRecords();
+  const {
+    groups,
+    visibleGroups,
+    monthRecords,
+    allMonthRecords,
+    startMonth,
+    endMonth,
+    selectedGender,
+    selectedGroup,
+    memberLookup
+  } = selectedPeriodRecords();
   const visibleGroupNames = new Set(visibleGroups.map((item) => item.group));
   const filteredRecords = monthRecords.filter((record) => visibleGroupNames.has(record.kelompok));
-  const hadir = filteredRecords.filter((record) => record.status === "Hadir").length;
-  const genderCount = (gender) => allMonthRecords
-    .filter((record) => record.status === "Hadir"
-      && memberForRecord(record)?.jenisKelamin === gender).length;
-  const memberStats = jamaahData
-    .filter((member) => member.peran.toLowerCase() === "jamaah"
-      && isInGenderFilter(member, document.getElementById("f-gender").value)
-      && (!document.getElementById("f-group").value || member.kelompok === document.getElementById("f-group").value))
-    .map((member) => {
-      const records = monthRecords.filter((record) => memberForRecord(record)?.id === member.id);
-      const attendanceRate = records.length
-        ? records.filter((record) => record.status === "Hadir").length / records.length
-        : 0;
-      return { member, rate: attendanceRate };
-    });
-  const rowsByAttendance = (rate) => groups
-    .map(({ group }) => {
-      const count = memberStats.filter((item) => item.member.kelompok === group && item.rate === rate).length;
-      return `<tr><td>${escapeHtml(group)}</td><td>${count}</td></tr>`;
-    }).join("") || '<tr><td colspan="2">Tidak ada kelompok pada filter ini.</td></tr>';
+  const recordCounts = { Hadir: 0, Pria: 0, Wanita: 0 };
+  filteredRecords.forEach((record) => {
+    if (record.status === "Hadir") {
+      recordCounts.Hadir += 1;
+    }
+  });
+  allMonthRecords.forEach((record) => {
+    if (record.status !== "Hadir") return;
+    const gender = memberLookup.find(record)?.jenisKelamin;
+    if (gender === "Pria") recordCounts.Pria += 1;
+    if (gender === "Wanita") recordCounts.Wanita += 1;
+  });
+  const memberRecords = new Map();
+  monthRecords.forEach((record) => {
+    const member = memberLookup.find(record);
+    if (!member) return;
+    if (!memberRecords.has(member.id)) memberRecords.set(member.id, { count: 0, present: 0 });
+    const stats = memberRecords.get(member.id);
+    stats.count += 1;
+    if (record.status === "Hadir") stats.present += 1;
+  });
+  const groupAttendanceCounts = new Map(groups.map(({ group }) => [group, { zero: 0, full: 0 }]));
+  let registeredMembers = 0;
+  jamaahData.forEach((member) => {
+    if (member.peran.toLowerCase() !== "jamaah"
+        || !isInGenderFilter(member, selectedGender)
+        || (selectedGroup && member.kelompok !== selectedGroup)) return;
+    registeredMembers += 1;
+    const stats = memberRecords.get(member.id);
+    const rate = stats?.count ? stats.present / stats.count : 0;
+    const counts = groupAttendanceCounts.get(member.kelompok);
+    if (!counts) return;
+    if (rate === 0) counts.zero += 1;
+    if (rate === 1) counts.full += 1;
+  });
+  const rowsByAttendance = (attendanceType) => groups.map(({ group }) => {
+    const count = groupAttendanceCounts.get(group)?.[attendanceType] || 0;
+    return `<tr><td>${escapeHtml(group)}</td><td>${count}</td></tr>`;
+  }).join("");
 
   document.getElementById("dashboard-cards").innerHTML = [
     ["Total Presensi", filteredRecords.length, `Periode ${startMonth} s.d. ${endMonth}`],
-    ["Hadir", hadir, `${filteredRecords.length ? Math.round(hadir / filteredRecords.length * 100) : 0}% dari presensi`],
-    ["Jamaah Terdaftar", memberStats.length, "Sesuai filter"],
-    ["Pria Hadir", genderCount("Pria"), "Data presensi"],
-    ["Wanita Hadir", genderCount("Wanita"), "Data presensi"]
+    ["Hadir", recordCounts.Hadir, `${filteredRecords.length ? Math.round(recordCounts.Hadir / filteredRecords.length * 100) : 0}% dari presensi`],
+    ["Jamaah Terdaftar", registeredMembers, "Sesuai filter"],
+    ["Pria Hadir", recordCounts.Pria, "Data presensi"],
+    ["Wanita Hadir", recordCounts.Wanita, "Data presensi"]
   ].map(([title, value, meta]) => `
     <article class="card">
       <h3>${escapeHtml(title)}</h3>
@@ -676,8 +743,8 @@ function renderDashboard() {
       </div>`).join("")
     : '<p class="chart-empty">Tidak ada kelompok pada tingkat kehadiran ini.</p>';
   renderStatusDonut(filteredRecords);
-  document.getElementById("dash-zero-table").innerHTML = rowsByAttendance(0);
-  document.getElementById("dash-full-table").innerHTML = rowsByAttendance(1);
+  document.getElementById("dash-zero-table").innerHTML = rowsByAttendance("zero");
+  document.getElementById("dash-full-table").innerHTML = rowsByAttendance("full");
 }
 
 function renderRiwayat() {
