@@ -52,26 +52,15 @@
   <h1>Dashboard <span class="subtitle">Resume Presensi per Periode per Kelompok</span></h1>
 
   <div class="filter-row">
-    <label>Dari bulan: <input type="month" id="f-bulan-mulai" onchange="dashboardPeriodChanged('start')"></label>
-    <label>Sampai bulan: <input type="month" id="f-bulan-sampai" onchange="dashboardPeriodChanged('end')"></label>
-    <label>Jenis Kelamin:
-      <select id="f-gender" onchange="renderDashboard()">
-        <option value="">Semua</option>
-        <option value="Pria">Pria</option>
-        <option value="Wanita">Wanita</option>
-      </select>
-    </label>
     <label>Kelompok:
-      <select id="f-group" onchange="renderDashboard()">
+      <select id="f-group" onchange="dashboardGroupChanged()">
         <option value="">Semua Kelompok</option>
         <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
         <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
       </select>
     </label>
-    <label>Tingkat Kehadiran:
-      <select id="f-tingkat" onchange="renderDashboard()">
-        <option value="0">0%</option>
-      </select>
+    <label>Bulan:
+      <input type="month" id="f-bulan" onchange="renderDashboard()" disabled>
     </label>
   </div>
 

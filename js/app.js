@@ -510,10 +510,6 @@ function memberForRecord(record) {
       && member.kelompok === record.kelompok);
 }
 
-function isInGenderFilter(member, selectedGender) {
-  return !selectedGender || member?.jenisKelamin === selectedGender;
-}
-
 function createDashboardMemberLookup() {
   const byId = new Map();
   const byNameAndGroup = new Map();
@@ -536,10 +532,10 @@ function createDashboardMemberLookup() {
   };
 }
 
-function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup) {
+function dashboardRecordsForPeriod(selectedMonth, selectedGroup, memberLookup) {
   const records = presensiData.filter((record) => {
     const recordMonth = record.tanggal.slice(0, 7);
-    return recordMonth >= startMonth && recordMonth <= endMonth
+    return (!selectedMonth || recordMonth === selectedMonth)
       && (!selectedGroup || record.kelompok === selectedGroup);
   });
   const sessionMembers = new Map();
@@ -575,19 +571,16 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
 }
 
 function selectedPeriodRecords() {
-  const startMonth = document.getElementById("f-bulan-mulai").value || currentMonth();
-  const endMonth = document.getElementById("f-bulan-sampai").value || currentMonth();
-  const selectedGender = document.getElementById("f-gender").value;
   const selectedGroup = document.getElementById("f-group").value;
+  const monthFilter = document.getElementById("f-bulan");
+  const selectedMonth = selectedGroup ? monthFilter.value : "";
+  monthFilter.disabled = !selectedGroup;
+  if (!selectedGroup) monthFilter.value = "";
   const memberLookup = createDashboardMemberLookup();
-  const allPeriodRecords = dashboardRecordsForPeriod(startMonth, endMonth, "", memberLookup);
+  const allPeriodRecords = dashboardRecordsForPeriod(selectedMonth, "", memberLookup);
   const allMonthRecords = selectedGroup
     ? allPeriodRecords.filter((record) => record.kelompok === selectedGroup)
     : allPeriodRecords;
-  const monthRecords = allMonthRecords.filter((record) =>
-    isInGenderFilter(memberLookup.find(record), selectedGender));
-  const chartMonthRecords = allPeriodRecords.filter((record) =>
-    isInGenderFilter(memberLookup.find(record), selectedGender));
   const summarizeGroups = (records, groupNames) => {
     const groupRecords = new Map();
     records.forEach((record) => {
@@ -610,41 +603,19 @@ function selectedPeriodRecords() {
       };
     });
   };
-  const groups = summarizeGroups(monthRecords, selectedGroup ? [selectedGroup] : GROUPS);
-  const chartGroups = summarizeGroups(chartMonthRecords, GROUPS);
-  const filter = document.getElementById("f-tingkat");
-  const previousThreshold = Number(filter.value) || 0;
-  const maxPercentage = Math.max(0, ...chartGroups
-    .filter((item) => item.records.length)
-    .map((item) => item.percentage));
-  filter.innerHTML = Array.from({ length: maxPercentage + 1 }, (_, percentage) =>
-    `<option value="${percentage}">${percentage}%</option>`
-  ).join("");
-  filter.value = String(Math.min(previousThreshold, maxPercentage));
-  const minimumPercentage = Number(filter.value);
+  const groups = summarizeGroups(allMonthRecords, selectedGroup ? [selectedGroup] : GROUPS);
+  const chartGroups = summarizeGroups(allPeriodRecords, GROUPS);
   return {
     groups,
-    visibleGroups: chartGroups.filter((item) => item.percentage >= minimumPercentage),
-    monthRecords,
+    chartGroups,
     allMonthRecords,
-    startMonth,
-    endMonth,
-    selectedGender,
+    selectedMonth,
     selectedGroup,
     memberLookup
   };
 }
 
-function dashboardPeriodChanged(changedInput) {
-  const startInput = document.getElementById("f-bulan-mulai");
-  const endInput = document.getElementById("f-bulan-sampai");
-  if (startInput.value && endInput.value && startInput.value > endInput.value) {
-    if (changedInput === "start") {
-      endInput.value = startInput.value;
-    } else {
-      startInput.value = endInput.value;
-    }
-  }
+function dashboardGroupChanged() {
   renderDashboard();
 }
 
@@ -720,17 +691,14 @@ function renderStatusDonut(records, meetingCount, showMeetings) {
 function renderDashboard() {
   const {
     groups,
-    visibleGroups,
-    monthRecords,
+    chartGroups,
     allMonthRecords,
-    startMonth,
-    endMonth,
-    selectedGender,
+    selectedMonth,
     selectedGroup,
     memberLookup
   } = selectedPeriodRecords();
   const statusCounts = new Map([["Hadir", 0], ["Izin", 0], ["Sakit", 0], ["Alpa", 0]]);
-  monthRecords.forEach((record) => {
+  allMonthRecords.forEach((record) => {
     if (statusCounts.has(record.status)) {
       statusCounts.set(record.status, statusCounts.get(record.status) + 1);
     }
@@ -740,7 +708,7 @@ function renderDashboard() {
     selectedGroup ? record.tanggal : `${record.kelompok}\u0000${record.tanggal}`)).size;
 
   const memberRecords = new Map();
-  monthRecords.forEach((record) => {
+  allMonthRecords.forEach((record) => {
     const member = memberLookup.find(record);
     if (!member) return;
     if (!memberRecords.has(member.id)) memberRecords.set(member.id, { count: 0, present: 0 });
@@ -751,8 +719,6 @@ function renderDashboard() {
   const eligibleMembers = jamaahData.filter((member) =>
     member.peran.toLowerCase() === "jamaah"
       && (!selectedGroup || member.kelompok === selectedGroup));
-  const filteredMembers = eligibleMembers.filter((member) =>
-    isInGenderFilter(member, selectedGender));
   const genderTotals = { Pria: 0, Wanita: 0 };
   const genderPresentIds = { Pria: new Set(), Wanita: new Set() };
   eligibleMembers.forEach((member) => {
@@ -771,7 +737,7 @@ function renderDashboard() {
     group,
     { zero: [], full: [] }
   ]));
-  filteredMembers.forEach((member) => {
+  eligibleMembers.forEach((member) => {
     const stats = memberRecords.get(member.id);
     const rate = stats?.count ? stats.present / stats.count : 0;
     const counts = groupAttendanceCounts.get(member.kelompok);
@@ -779,9 +745,7 @@ function renderDashboard() {
     if (rate === 0) counts.zero.push(member.nama);
     if (rate === 1) counts.full.push(member.nama);
   });
-  const periodLabel = startMonth === endMonth
-    ? `Bulan ${startMonth}`
-    : `Periode ${startMonth} s.d. ${endMonth}`;
+  const periodLabel = selectedMonth ? `Bulan ${selectedMonth}` : "Seluruh bulan";
   dashboardDetailNames = { zero: [], full: [] };
   const rowsByAttendance = (attendanceType) => groups.map(({ group }, index) => {
     const names = (groupAttendanceCounts.get(group)?.[attendanceType] || [])
@@ -809,8 +773,8 @@ function renderDashboard() {
   const percentWanita = totalWanita ? Math.round(wanitaHadir / totalWanita * 100) : 0;
 
   document.getElementById("dashboard-cards").innerHTML = [
-    { title: "Jumlah Jamaah", value: filteredMembers.length, meta: "Terdaftar sesuai filter", type: "count" },
-    { title: "Total Pertemuan", value: totalMeetings, meta: selectedGroup ? "Kelompok terpilih" : "Akumulasi per kelompok", type: "count" },
+    { title: "Jumlah Jamaah", value: eligibleMembers.length, meta: selectedGroup ? "Jamaah di kelompok terpilih" : "Seluruh jamaah terdaftar", type: "count" },
+    { title: "Total Pertemuan", value: totalMeetings, meta: selectedMonth ? `Bulan ${selectedMonth}` : "Seluruh bulan", type: "count" },
     { title: "Total Hadir", value: `${percentHadir}%`, meta: `${totalHadir} Total Hadir`, type: "percent" },
     { title: "Kehadiran Pria", value: `${percentPria}%`, meta: `${priaHadir} hadir dari ${totalPria} pria`, type: "percent" },
     { title: "Kehadiran Wanita", value: `${percentWanita}%`, meta: `${wanitaHadir} hadir dari ${totalWanita} wanita`, type: "percent" }
@@ -821,8 +785,8 @@ function renderDashboard() {
       <p class="meta">${escapeHtml(meta)}</p>
     </article>`).join("");
 
-  document.getElementById("attendance-chart").innerHTML = visibleGroups.length
-    ? visibleGroups.map(({ group, records, percentage }) => {
+  document.getElementById("attendance-chart").innerHTML = chartGroups.length
+    ? chartGroups.map(({ group, records, percentage }) => {
       const isSelected = selectedGroup === group;
       return `<button type="button" class="chart-row dashboard-chart-row${isSelected ? " chart-row-selected" : ""}"
         style="--group-chart-color:${dashboardGroupColor(group)}"
@@ -833,12 +797,12 @@ function renderDashboard() {
         <span class="chart-value">${records.length ? `${percentage}%` : "—"}</span>
       </button>`;
     }).join("")
-    : '<p class="chart-empty">Tidak ada kelompok pada tingkat kehadiran ini.</p>';
-  const showMeetingSummary = Boolean(selectedGroup && startMonth && endMonth);
+    : '<p class="chart-empty">Belum ada data presensi.</p>';
+  const showMeetingSummary = Boolean(selectedGroup);
   document.getElementById("status-chart-note").textContent = showMeetingSummary
-    ? `${totalMeetings} pertemuan terfilter · persentase status pada kelompok dan periode terpilih.`
-    : "Persentase komposisi status pada periode terpilih.";
-  renderStatusDonut(monthRecords, totalMeetings, showMeetingSummary);
+    ? `${totalMeetings} pertemuan terfilter · persentase status kelompok ${selectedGroup}${selectedMonth ? ` pada bulan ${selectedMonth}` : " pada seluruh bulan"}.`
+    : "Persentase komposisi status pada seluruh kelompok dan bulan.";
+  renderStatusDonut(allMonthRecords, totalMeetings, showMeetingSummary);
   document.getElementById("dash-zero-period").textContent = periodLabel;
   document.getElementById("dash-full-period").textContent = periodLabel;
   document.getElementById("dash-zero-table").innerHTML = rowsByAttendance("zero");
@@ -1833,11 +1797,8 @@ async function changeAccountPassword() {
   message.className = "form-message success-message";
 }
 
-document.getElementById("f-bulan-mulai").value = currentMonth();
-document.getElementById("f-bulan-sampai").value = currentMonth();
 document.getElementById("p-tanggal").value = localDateString();
 document.getElementById("batch-date").value = localDateString();
-document.getElementById("f-tingkat").addEventListener("change", renderDashboard);
 window.addEventListener("focus", () => {
   if (sharedSyncEnabled) refreshSharedData();
 });
