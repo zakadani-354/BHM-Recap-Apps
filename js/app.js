@@ -806,7 +806,7 @@ function handleBarcodeScan(value) {
 
 function findBatchMemberMatches(query, group, gender) {
   const normalizedQuery = normalizeNameForMatch(query);
-  const candidates = jamaahData.filter((member) => member.kelompok === group
+  const candidates = jamaahData.filter((member) => (group === "all" || member.kelompok === group)
     && member.jenisKelamin === gender
     && normalizeNameForMatch(member.nama).includes(normalizedQuery));
   const exactMatches = candidates.filter((member) =>
@@ -942,6 +942,7 @@ function resolveBatchPresensi(group, gender) {
   const incoming = [];
   const errors = [];
   const previews = [];
+  const groupDescription = group === "all" ? "semua kelompok" : `kelompok ${group}`;
   const addEntry = (query, statusValue, date, location) => {
     const status = normalizeStatus(statusValue);
     if (!query || !status) {
@@ -950,18 +951,18 @@ function resolveBatchPresensi(group, gender) {
     }
     const matches = findBatchMemberMatches(query, group, gender);
     if (!matches.length) {
-      errors.push(`${location}: nama "${query}" tidak ditemukan pada kelompok ${group}, ${gender}.`);
+      errors.push(`${location}: nama "${query}" tidak ditemukan pada ${groupDescription}, ${gender}.`);
       return;
     }
     if (matches.length > 1) {
-      errors.push(`${location}: "${query}" cocok dengan beberapa nama: ${matches.map((member) => member.nama).join(", ")}. Ketik nama lebih lengkap.`);
+      errors.push(`${location}: "${query}" cocok dengan beberapa jamaah: ${matches.map((member) => `${member.nama} (${member.kelompok})`).join(", ")}. Ketik nama lebih lengkap.`);
       return;
     }
     const [member] = matches;
     const record = {
       memberId: member.id,
       nama: member.nama,
-      kelompok: group,
+      kelompok: member.kelompok,
       tanggal: date,
       status,
       metode: "Massal"
@@ -971,7 +972,7 @@ function resolveBatchPresensi(group, gender) {
       return;
     }
     incoming.push(record);
-    previews.push(`${location}: ${member.nama} — ${date} — ${status}`);
+    previews.push(`${location}: ${member.nama} (${member.kelompok}) — ${date} — ${status}`);
   };
 
   if (attendanceBatchFileData) {
@@ -1011,8 +1012,8 @@ function previewBatchMatches() {
     preview.className = "form-message batch-match-preview";
     return;
   }
-  if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender)) {
-    preview.textContent = "Pilih kelompok dan jenis kelamin untuk mencocokkan nama.";
+  if ((group !== "all" && !GROUPS.includes(group)) || !["Pria", "Wanita"].includes(gender)) {
+    preview.textContent = "Pilih kelompok atau Semua Kelompok, serta jenis kelamin, untuk mencocokkan nama.";
     preview.className = "form-message batch-match-preview";
     return;
   }
@@ -1338,8 +1339,8 @@ function addBatchPresensi() {
   const group = document.getElementById("batch-group").value;
   const gender = document.getElementById("batch-gender").value;
   try {
-    if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender)) {
-      throw new Error("Pilih kelompok dan jenis kelamin untuk presensi massal.");
+    if ((group !== "all" && !GROUPS.includes(group)) || !["Pria", "Wanita"].includes(gender)) {
+      throw new Error("Pilih kelompok atau Semua Kelompok, serta jenis kelamin, untuk presensi massal.");
     }
     const { incoming, errors } = resolveBatchPresensi(group, gender);
     if (errors.length) throw new Error(errors.join("\n"));

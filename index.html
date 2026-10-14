@@ -172,6 +172,7 @@
           <label>Kelompok
             <select id="batch-group" required onchange="previewBatchMatches()">
               <option value="">Pilih kelompok...</option>
+              <option value="all">Semua Kelompok</option>
               <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
               <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
             </select>
@@ -183,7 +184,7 @@
           </label>
           <label>Tanggal (input ketik) <input type="date" id="batch-date" required></label>
         </div>
-        <p class="section-help">Untuk input ketik, isi satu nama dan status per baris, contoh <code>Ade, H</code>. Untuk file, baris pertama berisi <code>Nama, 2026-10-01, 2026-10-08</code>; kolom pertama di baris berikutnya berisi nama dan sel tanggal berisi H (Hadir), I (Izin), S (Sakit), atau A (Alpa). Sel status yang kosong dilewati. Pilih kelompok dan jenis kelamin agar nama dicocokkan dengan data jamaah.</p>
+        <p class="section-help">Untuk input ketik, isi satu nama dan status per baris, contoh <code>Ade, H</code>. Untuk file, baris pertama berisi <code>Nama, 2026-10-01, 2026-10-08</code>; kolom pertama di baris berikutnya berisi nama dan sel tanggal berisi H (Hadir), I (Izin), S (Sakit), atau A (Alpa). Sel status yang kosong dilewati. Pilih kelompok atau Semua Kelompok, serta jenis kelamin, agar nama dicocokkan dengan data jamaah.</p>
         <div class="batch-file-import">
           <label for="attendance-batch-file">Impor presensi dari file CSV/XLSX</label>
           <input id="attendance-batch-file" type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
