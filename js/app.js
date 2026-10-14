@@ -149,6 +149,32 @@ function switchTab(tab) {
   updateActiveSession({ presensiTab: tab });
 }
 
+function setAttendanceMode(mode) {
+  const isSingle = mode === "satuan";
+  const singleSection = document.getElementById("attendance-single");
+  const massSection = document.getElementById("attendance-mass");
+  singleSection.classList.toggle("hidden", !isSingle);
+  massSection.classList.toggle("hidden", isSingle);
+  singleSection.querySelectorAll("input,select,textarea").forEach((control) => {
+    control.disabled = !isSingle;
+  });
+  massSection.querySelectorAll("input,select,textarea").forEach((control) => {
+    control.disabled = isSingle;
+  });
+  document.getElementById("attendance-mode-single").classList.toggle("active", isSingle);
+  document.getElementById("attendance-mode-mass").classList.toggle("active", !isSingle);
+  document.getElementById("p-metode").value = "Satuan";
+  const session = sessionStorage.getItem(SESSION_KEY);
+  if (session) updateActiveSession({ attendanceMode: mode });
+  if (!isSingle && barcodeScanner) {
+    stopBarcodeScanner().catch((error) => {
+      const message = document.getElementById("scanner-message");
+      message.textContent = `Kamera gagal ditutup saat beralih ke input massal: ${error.message}`;
+      message.className = "form-message error-message";
+    });
+  }
+}
+
 function switchJamaahTab(tab) {
   document.getElementById("jamaah-satuan").classList.toggle("hidden", tab !== "satuan");
   document.getElementById("jamaah-file").classList.toggle("hidden", tab !== "file");
@@ -165,7 +191,7 @@ function updateActiveSession(updates) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...activeSession, ...updates }));
 }
 
-function openApp(username, role, page = "dashboard", presensiTab = "input", jamaahTab = "satuan") {
+function openApp(username, role, page = "dashboard", presensiTab = "input", jamaahTab = "satuan", attendanceMode = "satuan") {
   window.currentRole = role;
   document.getElementById("view-login").classList.add("hidden");
   document.getElementById("main-header").style.display = "";
@@ -184,6 +210,7 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
     document.getElementById("jamaah-satuan").classList.remove("hidden");
   }
   switchTab(presensiTab === "riwayat" ? "riwayat" : "input");
+  setAttendanceMode(attendanceMode === "massal" ? "massal" : "satuan");
   switchJamaahTab(jamaahTab === "file" ? "file" : "satuan");
   showPage(page === "admin" && !isAdmin ? "dashboard" : page);
 }
@@ -216,7 +243,8 @@ function restoreActiveSession() {
     account.role,
     activeSession.page || "dashboard",
     activeSession.presensiTab || "input",
-    activeSession.jamaahTab || "satuan"
+    activeSession.jamaahTab || "satuan",
+    activeSession.attendanceMode || "satuan"
   );
 }
 
@@ -238,7 +266,8 @@ function doLogin() {
     role: account.role,
     page: "dashboard",
     presensiTab: "input",
-    jamaahTab: "satuan"
+    jamaahTab: "satuan",
+    attendanceMode: "satuan"
   }));
   openApp(username, account.role);
 }
@@ -538,6 +567,11 @@ function updateAttendanceMemberOptions(selectedId = "") {
   }
 }
 
+function attendanceManualSelectionChanged() {
+  document.getElementById("p-metode").value = "Satuan";
+  updateAttendanceMemberOptions();
+}
+
 function renderBarcodeMemberOptions() {
   const select = document.getElementById("barcode-member");
   if (!select) return;
@@ -689,7 +723,6 @@ async function stopBarcodeScanner() {
 }
 
 function handleBarcodeScan(value) {
-  document.getElementById("p-metode").value = "Barcode";
   const barcodeId = String(value).trim().replace(/^BHM:/i, "");
   const member = jamaahData.find((item) => item.id === barcodeId);
   if (!member) {
@@ -710,6 +743,59 @@ function handleBarcodeScan(value) {
     message.textContent = `Barcode terbaca, tetapi kamera gagal ditutup: ${error.message}`;
     message.className = "form-message error-message";
   });
+}
+
+function findBatchMemberMatches(query, group, gender) {
+  const normalizedQuery = query.toLocaleLowerCase();
+  const candidates = jamaahData.filter((member) => member.kelompok === group
+    && member.jenisKelamin === gender
+    && member.nama.toLocaleLowerCase().includes(normalizedQuery));
+  const exactMatches = candidates.filter((member) =>
+    member.nama.toLocaleLowerCase() === normalizedQuery);
+  return exactMatches.length ? exactMatches : candidates;
+}
+
+function previewBatchMatches() {
+  const preview = document.getElementById("batch-match-preview");
+  const group = document.getElementById("batch-group").value;
+  const gender = document.getElementById("batch-gender").value;
+  const text = document.getElementById("attendance-batch").value.trim();
+  if (!text) {
+    preview.textContent = "";
+    preview.className = "form-message batch-match-preview";
+    return;
+  }
+  if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender)) {
+    preview.textContent = "Pilih kelompok dan jenis kelamin untuk mencocokkan nama.";
+    preview.className = "form-message batch-match-preview";
+    return;
+  }
+  try {
+    const rows = parseCsv(text);
+    let hasIssues = false;
+    preview.textContent = rows.map((row, index) => {
+      const query = (row[0] || "").trim();
+      const status = normalizeStatus(row[1]);
+      if (!query || !status) {
+        hasIssues = true;
+        return `Baris ${index + 1}: format atau status belum valid.`;
+      }
+      const matches = findBatchMemberMatches(query, group, gender);
+      if (!matches.length) {
+        hasIssues = true;
+        return `Baris ${index + 1}: "${query}" tidak ditemukan.`;
+      }
+      if (matches.length > 1) {
+        hasIssues = true;
+        return `Baris ${index + 1}: "${query}" cocok dengan beberapa nama (${matches.map((member) => member.nama).join(", ")}); ketik nama lebih lengkap.`;
+      }
+      return `Baris ${index + 1}: ${query} → ${matches[0].nama} — ${status}`;
+    }).join("\n");
+    preview.className = `form-message batch-match-preview ${hasIssues ? "error-message" : "success-message"}`;
+  } catch (error) {
+    preview.textContent = error.message;
+    preview.className = "form-message batch-match-preview error-message";
+  }
 }
 
 async function startBarcodeScanner() {
@@ -940,94 +1026,49 @@ async function importFileData() {
   }
 }
 
-async function importAttendanceFile() {
-  const input = document.getElementById("attendance-file");
-  const message = document.getElementById("attendance-import-message");
-  if (!input.files.length) {
-    message.textContent = "Pilih file CSV terlebih dahulu.";
-    message.className = "form-message error-message";
-    return;
-  }
-  try {
-    document.getElementById("attendance-batch").value = await input.files[0].text();
-    message.textContent = "File dibaca. Periksa format Nama,Status lalu simpan.";
-    message.className = "form-message success-message";
-  } catch (error) {
-    message.textContent = `File tidak dapat dibaca: ${error.message}`;
-    message.className = "form-message error-message";
-  }
-}
-
-function normalizeOcrText(text) {
-  return text.split(/\r?\n/)
-    .map((line) => line.trim().replace(/^\d+[\s.)-]*/, ""))
-    .filter(Boolean)
-    .map((line) => {
-      const match = line.match(/(?:^|[\s,;|])\b(HADIR|IZIN|SAKIT|ALPA|ALPHA|H|I|S|A)\b\s*$/i)
-        || line.match(/^\s*(HADIR|IZIN|SAKIT|ALPA|ALPHA|H|I|S|A)\b[\s,;|]+/i);
-      if (!match) return line;
-      const status = normalizeStatus(match[1]);
-      const name = line.replace(match[0], "").replace(/^[\s,;|]+|[\s,;|]+$/g, "");
-      return name ? `${name},${status}` : line;
-    }).join("\n");
-}
-
-async function readAttendancePhoto() {
-  const input = document.getElementById("attendance-photo");
-  const message = document.getElementById("attendance-import-message");
-  if (!input.files.length) {
-    message.textContent = "Pilih foto daftar presensi terlebih dahulu.";
-    message.className = "form-message error-message";
-    return;
-  }
-  if (!window.Tesseract) {
-    message.textContent = "Pustaka OCR tidak tersedia. Periksa koneksi internet, lalu muat ulang halaman.";
-    message.className = "form-message error-message";
-    return;
-  }
-  message.textContent = "Membaca foto... hasil OCR perlu diperiksa karena tulisan tangan bisa keliru.";
-  message.className = "form-message";
-  try {
-    const result = await window.Tesseract.recognize(input.files[0], "eng");
-    document.getElementById("attendance-batch").value = normalizeOcrText(result.data.text);
-    message.textContent = "Foto selesai dibaca. Koreksi hasilnya, pastikan format Nama,Status, lalu simpan.";
-    message.className = "form-message success-message";
-  } catch (error) {
-    message.textContent = `OCR gagal membaca foto: ${error.message}`;
-    message.className = "form-message error-message";
-  }
-}
-
 function addBatchPresensi() {
   const message = document.getElementById("attendance-import-message");
-  const group = document.getElementById("p-kelompok").value;
-  const date = document.getElementById("p-tanggal").value;
+  const group = document.getElementById("batch-group").value;
+  const gender = document.getElementById("batch-gender").value;
+  const date = document.getElementById("batch-date").value;
   try {
-    if (!GROUPS.includes(group) || !date) throw new Error("Pilih kelompok dan tanggal pada formulir presensi.");
+    if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender) || !date) {
+      throw new Error("Pilih kelompok, jenis kelamin, dan tanggal untuk presensi massal.");
+    }
     const rows = parseCsv(document.getElementById("attendance-batch").value);
-    if (!rows.length) throw new Error("Tidak ada hasil presensi untuk disimpan.");
-    const hasHeader = /nama/i.test(rows[0][0] || "");
-    const dataRows = hasHeader ? rows.slice(1) : rows;
+    if (!rows.length) throw new Error("Ketik nama dan status presensi terlebih dahulu.");
     const incoming = [];
     const errors = [];
-    dataRows.forEach((row, index) => {
-      const name = (row[0] || "").trim();
+    rows.forEach((row, index) => {
+      const query = (row[0] || "").trim();
       const status = normalizeStatus(row[1]);
-      const line = index + (hasHeader ? 2 : 1);
-      if (!name || !status) {
+      const line = index + 1;
+      if (!query || !status) {
         errors.push(`Baris ${line}: gunakan format Nama,Status (H/I/S/A).`);
-      } else if (!jamaahData.some((member) => member.nama.toLowerCase() === name.toLowerCase()
-          && member.kelompok === group)) {
-        errors.push(`Baris ${line}: ${name} belum terdaftar di ${group}.`);
+        return;
+      }
+      const matches = findBatchMemberMatches(query, group, gender);
+      if (!matches.length) {
+        errors.push(`Baris ${line}: tidak ada nama yang cocok dengan "${query}" pada kelompok ${group}, ${gender}.`);
+        return;
+      }
+      if (matches.length > 1) {
+        errors.push(`Baris ${line}: "${query}" cocok dengan beberapa nama: ${matches.map((member) => member.nama).join(", ")}. Ketik nama yang lebih lengkap.`);
+        return;
+      }
+      const [member] = matches;
+      const record = {
+        memberId: member.id,
+        nama: member.nama,
+        kelompok: group,
+        tanggal: date,
+        status,
+        metode: "Massal"
+      };
+      if (hasAttendance(record, incoming)) {
+        errors.push(`Baris ${line}: presensi ${member.nama} untuk tanggal ini sudah ada.`);
       } else {
-        const member = jamaahData.find((item) => item.nama.toLowerCase() === name.toLowerCase()
-          && item.kelompok === group);
-        const record = { memberId: member.id, nama: member.nama, kelompok: group, tanggal: date, status, metode: "Impor" };
-        if (hasAttendance(record, incoming)) {
-          errors.push(`Baris ${line}: presensi ${name} untuk tanggal ini sudah ada.`);
-        } else {
-          incoming.push(record);
-        }
+        incoming.push(record);
       }
     });
     if (errors.length) throw new Error(errors.join("\n"));
@@ -1035,7 +1076,8 @@ function addBatchPresensi() {
     presensiData.push(...incoming);
     saveAttendance();
     document.getElementById("attendance-batch").value = "";
-    message.textContent = `${incoming.length} presensi berhasil disimpan.`;
+    document.getElementById("batch-match-preview").textContent = "";
+    message.textContent = `${incoming.length} presensi berhasil disimpan: ${incoming.map((record) => record.nama).join(", ")}.`;
     message.className = "form-message success-message";
     renderRiwayat();
     renderDashboard();
@@ -1117,6 +1159,7 @@ function changeAccountPassword() {
 
 document.getElementById("f-bulan").value = currentMonth();
 document.getElementById("p-tanggal").value = localDateString();
+document.getElementById("batch-date").value = localDateString();
 document.getElementById("f-bulan").addEventListener("change", renderDashboard);
 document.getElementById("f-tingkat").addEventListener("change", renderDashboard);
 renderDashboard();

@@ -112,75 +112,85 @@
 
   <div id="tab-input">
     <h2>Form Input Presensi</h2>
+    <div class="attendance-mode-switch" role="group" aria-label="Metode formulir presensi">
+      <button id="attendance-mode-single" class="btn-secondary active" type="button"
+        onclick="setAttendanceMode('satuan')">Input Satuan</button>
+      <button id="attendance-mode-mass" class="btn-secondary" type="button"
+        onclick="setAttendanceMode('massal')">Input Massal</button>
+    </div>
     <form onsubmit="event.preventDefault(); addPresensi();" class="form-box">
-      <div class="form-row">
-        <label>Kelompok
-          <select id="p-kelompok" required onchange="updateAttendanceMemberOptions()">
-            <option value="">Pilih...</option>
-            <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
-            <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
-          </select>
-        </label>
-        <label>Jenis Kelamin
-          <select id="p-gender" required onchange="updateAttendanceMemberOptions()">
-            <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
-            <option value="Tidak diatur">Tidak diatur (data lama)</option>
-          </select>
-        </label>
-        <label>Peran
-          <select id="p-peran" required onchange="updateAttendanceMemberOptions()">
-            <option value="">Pilih...</option><option>Jamaah</option><option>Pengurus</option>
-          </select>
-        </label>
-        <label>Nama
-          <select id="p-nama" required disabled>
-            <option value="">Pilih kelompok, jenis kelamin, dan peran...</option>
-          </select>
-        </label>
-        <label>Tanggal <input type="date" id="p-tanggal" required></label>
-      </div>
-      <div class="form-row">
-        <label>Status
-          <select id="p-status" required>
-            <option value="">Pilih status...</option>
-            <option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option>
-          </select>
-        </label>
-      </div>
-      <div class="form-row">
-        <label>Metode Input
-          <select id="p-metode"><option value="Satuan">Satuan</option><option value="Barcode">Barcode</option></select>
-        </label>
-      </div>
-      <section class="scanner-box" aria-labelledby="barcode-scan-title">
-        <h3 id="barcode-scan-title">Input Presensi dengan Barcode</h3>
-        <p class="section-help">Pilih kelompok, lalu buka pemindai. Hasil pindai memilih jamaah; tentukan status sebelum menyimpan.</p>
-        <div class="scanner-controls">
-          <button id="start-scanner" class="btn-secondary" type="button" onclick="startBarcodeScanner()">Buka Pemindai</button>
-          <button id="stop-scanner" class="btn-secondary hidden" type="button" onclick="stopBarcodeScanner()">Tutup Kamera</button>
-          <span id="scanner-message" class="form-message" role="status"></span>
+      <input type="hidden" id="p-metode" value="Satuan">
+      <div id="attendance-single">
+        <div class="form-row">
+          <label>Kelompok
+            <select id="p-kelompok" required onchange="attendanceManualSelectionChanged()">
+              <option value="">Pilih...</option>
+              <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+              <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+            </select>
+          </label>
+          <label>Jenis Kelamin
+            <select id="p-gender" required onchange="attendanceManualSelectionChanged()">
+              <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
+              <option value="Tidak diatur">Tidak diatur (data lama)</option>
+            </select>
+          </label>
+          <label>Peran
+            <select id="p-peran" required onchange="attendanceManualSelectionChanged()">
+              <option value="">Pilih...</option><option>Jamaah</option><option>Pengurus</option>
+            </select>
+          </label>
+          <label>Nama
+            <select id="p-nama" required disabled onchange="document.getElementById('p-metode').value='Satuan'">
+              <option value="">Pilih kelompok, jenis kelamin, dan peran...</option>
+            </select>
+          </label>
+          <label>Tanggal <input type="date" id="p-tanggal" required></label>
         </div>
-        <div id="barcode-scanner" class="barcode-scanner hidden"></div>
-      </section>
-      <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan</button>
+        <div class="form-row">
+          <label>Status
+            <select id="p-status" required>
+              <option value="">Pilih status...</option>
+              <option>Hadir</option><option>Izin</option><option>Sakit</option><option>Alpa</option>
+            </select>
+          </label>
+        </div>
+        <section class="scanner-box" aria-labelledby="barcode-scan-title">
+          <h3 id="barcode-scan-title">Input Satuan dengan Barcode</h3>
+          <p class="section-help">Scan barcode jamaah untuk mengisi nama otomatis, atau pilih nama melalui dropdown. Status tetap dipilih secara manual.</p>
+          <div class="scanner-controls">
+            <button id="start-scanner" class="btn-secondary" type="button" onclick="startBarcodeScanner()">Scan Barcode</button>
+            <button id="stop-scanner" class="btn-secondary hidden" type="button" onclick="stopBarcodeScanner()">Tutup Kamera</button>
+            <span id="scanner-message" class="form-message" role="status"></span>
+          </div>
+          <div id="barcode-scanner" class="barcode-scanner hidden"></div>
+        </section>
+        <button type="submit" class="btn-primary"><i class="fa-solid fa-floppy-disk"></i> Simpan Presensi Satuan</button>
+      </div>
+      <div id="attendance-mass" class="hidden">
+        <div class="form-row">
+          <label>Kelompok
+            <select id="batch-group" required onchange="previewBatchMatches()">
+              <option value="">Pilih kelompok...</option>
+              <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+              <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+            </select>
+          </label>
+          <label>Jenis Kelamin
+            <select id="batch-gender" required onchange="previewBatchMatches()">
+              <option value="">Pilih jenis kelamin...</option><option>Pria</option><option>Wanita</option>
+            </select>
+          </label>
+          <label>Tanggal <input type="date" id="batch-date" required></label>
+        </div>
+        <p class="section-help">Ketik satu nama dan status per baris, contoh <code>Ade, H</code>. Nama dicocokkan dengan jamaah pada kelompok dan jenis kelamin yang dipilih. Status: H (Hadir), I (Izin), S (Sakit), A (Alpa).</p>
+        <label for="attendance-batch">Daftar presensi massal</label>
+        <textarea id="attendance-batch" rows="8" placeholder="Ade, H&#10;Budi, I" oninput="previewBatchMatches()"></textarea>
+        <p id="batch-match-preview" class="form-message batch-match-preview" role="status" aria-live="polite"></p>
+        <button type="button" class="btn-primary" onclick="addBatchPresensi()">Simpan Presensi Massal</button>
+        <p id="attendance-import-message" class="form-message" role="status"></p>
+      </div>
     </form>
-
-    <section class="form-box import-box" aria-labelledby="attendance-import-title">
-      <h2 id="attendance-import-title">Input Presensi dari File atau Foto</h2>
-      <p class="section-help">Pilih kelompok dan tanggal di formulir di atas. CSV berisi kolom <code>Nama,Status</code>; status menerima H/I/S/A atau Hadir/Izin/Sakit/Alpa.</p>
-      <div class="import-controls">
-        <label>File CSV <input id="attendance-file" type="file" accept=".csv,.txt,text/csv"></label>
-        <button type="button" class="btn-secondary" onclick="importAttendanceFile()">Baca CSV</button>
-      </div>
-      <div class="import-controls">
-        <label>Foto daftar presensi <input id="attendance-photo" type="file" accept="image/*"></label>
-        <button type="button" class="btn-secondary" onclick="readAttendancePhoto()">Baca Foto (OCR)</button>
-      </div>
-      <label for="attendance-batch">Periksa dan koreksi hasil sebelum disimpan</label>
-      <textarea id="attendance-batch" rows="5" placeholder="Ahmad,H&#10;Siti,I"></textarea>
-      <button type="button" class="btn-primary" onclick="addBatchPresensi()">Simpan Presensi Massal</button>
-      <p id="attendance-import-message" class="form-message" role="status"></p>
-    </section>
   </div>
 
   <div id="tab-riwayat" class="hidden">
@@ -338,7 +348,6 @@
 
 </main>
 
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
