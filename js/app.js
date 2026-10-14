@@ -730,8 +730,7 @@ function renderDashboard() {
       statusCounts.set(record.status, statusCounts.get(record.status) + 1);
     }
   });
-  const totalMeetings = new Set(allMonthRecords.map((record) =>
-    selectedGroup ? record.tanggal : `${record.kelompok}\u0000${record.tanggal}`)).size;
+  const totalMeetings = new Set(allMonthRecords.map((record) => record.tanggal)).size;
   const totalAttendance = allMonthRecords.filter((record) => record.status === "Hadir").length;
   const meetingSessions = new Set(allMonthRecords.map((record) =>
     `${record.kelompok}\u0000${record.tanggal}`));
