@@ -32,8 +32,28 @@ function getConfig() {
       "Sinkronisasi belum dikonfigurasi. Admin perlu mengatur URL Supabase dan service role key pada hosting."
     );
   }
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new ApiError(
+      503,
+      "INVALID_SUPABASE_URL",
+      "SUPABASE_URL tidak valid. Gunakan Project URL Supabase, bukan URL API atau REST."
+    );
+  }
+  if (!["http:", "https:"].includes(parsedUrl.protocol)
+      || parsedUrl.pathname !== "/"
+      || parsedUrl.search
+      || parsedUrl.hash) {
+    throw new ApiError(
+      503,
+      "INVALID_SUPABASE_URL",
+      "SUPABASE_URL harus berupa Project URL dasar, contoh https://<project-ref>.supabase.co tanpa /rest/v1 atau path lain."
+    );
+  }
   return {
-    url: url.replace(/\/+$/, ""),
+    url: parsedUrl.origin,
     serviceKey,
     sessionSecret: process.env.BHM_SESSION_SECRET || serviceKey
   };
@@ -66,7 +86,10 @@ async function supabaseRequest(config, path, options = {}) {
         hint: typeof responseBody.hint === "string" ? responseBody.hint.slice(0, 400) : undefined
       };
     } catch {
-      diagnostic = { response: "Non-JSON error response" };
+      diagnostic = {
+        response: "Non-JSON error response",
+        contentType: response.headers.get("content-type") || "unknown"
+      };
     }
     console.error("Supabase request failed.", {
       status: response.status,
@@ -83,6 +106,8 @@ async function supabaseRequest(config, path, options = {}) {
       message = "Fungsi atau tabel Supabase belum ditemukan. Jalankan ulang supabase/schema.sql di SQL Editor, lalu coba lagi.";
     } else if (authorizationFailure) {
       message = "Supabase menolak akses server. Periksa SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY di Vercel, lalu redeploy.";
+    } else if (response.status === 404 && diagnostic.response === "Non-JSON error response") {
+      message = "Supabase mengembalikan halaman 404, bukan respons API. Pastikan SUPABASE_URL di Vercel hanya berisi Project URL dasar, contoh https://<project-ref>.supabase.co, tanpa /rest/v1.";
     }
     throw new ApiError(
       502,

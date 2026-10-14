@@ -8,7 +8,9 @@ serverless function alongside the static app.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
    (Production, and Preview/Development if you use them), then redeploy:
-   - `SUPABASE_URL`: the project URL from Supabase Project Settings > API.
+   - `SUPABASE_URL`: the bare Project URL from Supabase Project Settings > API,
+     for example `https://<project-ref>.supabase.co`. Do not append `/rest/v1`,
+     `/auth/v1`, or any other path.
    - `SUPABASE_SERVICE_ROLE_KEY`: the server-only service role key from the same
      page. Never add this key to HTML, JavaScript, or a `NEXT_PUBLIC_` variable.
    - `BHM_SESSION_SECRET`: a long random secret used to sign login sessions.
@@ -44,3 +46,6 @@ code, but never logs the API key or login password.
   deployment's environment and redeploy after changing them.
 - Any other status or code: check that `SUPABASE_URL` is the Project URL for the
   same Supabase project where `schema.sql` was run.
+- A plain HTTP 404 without a Supabase error code usually means `SUPABASE_URL`
+  points at the wrong address or includes an API path. Set it to the bare
+  Project URL, save the Vercel variable, and redeploy.
