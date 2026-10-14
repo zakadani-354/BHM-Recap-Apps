@@ -32,6 +32,7 @@ let jamaahData = savedMembers.map((member) => {
   };
 });
 let barcodeScanner = null;
+let attendanceBatchFileData = null;
 window.currentRole = null;
 if (JSON.stringify(jamaahData) !== JSON.stringify(savedMembers)) {
   saveMembers();
@@ -813,12 +814,199 @@ function findBatchMemberMatches(query, group, gender) {
   return exactMatches.length ? exactMatches : candidates;
 }
 
+function normalizeAttendanceDate(value) {
+  const formatDate = (year, month, day) => {
+    const numbers = [Number(year), Number(month), Number(day)];
+    if (numbers.some((part) => !Number.isInteger(part)) || numbers[0] < 1000 || numbers[0] > 9999) {
+      return "";
+    }
+    const date = new Date(Date.UTC(numbers[0], numbers[1] - 1, numbers[2]));
+    if (date.getUTCFullYear() !== numbers[0]
+        || date.getUTCMonth() + 1 !== numbers[1]
+        || date.getUTCDate() !== numbers[2]) return "";
+    return `${String(numbers[0]).padStart(4, "0")}-${String(numbers[1]).padStart(2, "0")}-${String(numbers[2]).padStart(2, "0")}`;
+  };
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return formatDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+  }
+  if (typeof value === "number" && window.XLSX?.SSF?.parse_date_code) {
+    const parsed = window.XLSX.SSF.parse_date_code(value);
+    if (parsed) {
+      return formatDate(parsed.y, parsed.m, parsed.d);
+    }
+  }
+  const text = String(value || "").trim();
+  let parts = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  let year;
+  let month;
+  let day;
+  if (parts) {
+    [, year, month, day] = parts;
+  } else {
+    parts = text.match(/^(\d{1,2})[/. -](\d{1,2})[/. -](\d{4})$/);
+    if (!parts) return "";
+    const first = Number(parts[1]);
+    const second = Number(parts[2]);
+    year = parts[3];
+    if (first > 12) {
+      day = parts[1];
+      month = parts[2];
+    } else if (second > 12) {
+      month = parts[1];
+      day = parts[2];
+    } else {
+      day = parts[1];
+      month = parts[2];
+    }
+  }
+  return formatDate(year, month, day);
+}
+
+function parseAttendanceFileRows(rows, fileName) {
+  if (!rows.length) throw new Error("File tidak berisi data.");
+  const firstCell = String(rows[0][0] || "").trim().toLowerCase();
+  if (!["nama", "nama jamaah", "name", "jamaah"].includes(firstCell)) {
+    throw new Error("Baris pertama harus diawali kolom Nama, lalu tanggal pengajian pada kolom berikutnya.");
+  }
+  const dates = rows[0].slice(1).map(normalizeAttendanceDate);
+  if (!dates.length || dates.some((date) => !date)) {
+    throw new Error("Tanggal pada baris pertama tidak valid. Gunakan format YYYY-MM-DD atau DD/MM/YYYY.");
+  }
+  if (new Set(dates).size !== dates.length) {
+    throw new Error("Tanggal pengajian pada header tidak boleh berulang.");
+  }
+  const entries = rows.slice(1).map((row, index) => ({
+    name: String(row[0] || "").trim(),
+    statuses: dates.map((_, dateIndex) => String(row[dateIndex + 1] || "").trim()),
+    line: index + 2,
+    extraValues: row.slice(dates.length + 1).some((value) => String(value || "").trim())
+  }));
+  if (!entries.some((entry) => entry.statuses.some(Boolean))) {
+    throw new Error("File belum memiliki status presensi pada sel tanggal.");
+  }
+  return { fileName, dates, entries };
+}
+
+async function loadBatchAttendanceFile(file) {
+  if (!file) return;
+  const message = document.getElementById("batch-file-message");
+  attendanceBatchFileData = null;
+  message.textContent = "";
+  message.className = "form-message";
+  try {
+    const extension = file.name.split(".").pop().toLowerCase();
+    let rows;
+    if (extension === "csv") {
+      rows = parseCsv(await file.text());
+    } else if (extension === "xlsx") {
+      if (!window.XLSX) {
+        throw new Error("Pustaka XLSX tidak tersedia. Periksa koneksi internet lalu muat ulang.");
+      }
+      const workbook = window.XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
+      const firstSheet = workbook.SheetNames[0];
+      if (!firstSheet) throw new Error("Workbook tidak memiliki lembar kerja.");
+      rows = window.XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], {
+        header: 1,
+        raw: true,
+        defval: "",
+        blankrows: false
+      });
+    } else {
+      throw new Error("Pilih file dengan format CSV atau XLSX.");
+    }
+    attendanceBatchFileData = parseAttendanceFileRows(rows, file.name);
+    document.getElementById("attendance-batch").value = "";
+    message.textContent = `${file.name} dimuat: ${attendanceBatchFileData.entries.length} baris jamaah, ${attendanceBatchFileData.dates.length} tanggal. Periksa hasil pencocokan sebelum menyimpan.`;
+    message.className = "form-message success-message";
+    previewBatchMatches();
+  } catch (error) {
+    document.getElementById("attendance-batch-file").value = "";
+    message.textContent = error.message;
+    message.className = "form-message error-message";
+    previewBatchMatches();
+  }
+}
+
+function manualBatchTextChanged() {
+  if (attendanceBatchFileData) {
+    attendanceBatchFileData = null;
+    document.getElementById("attendance-batch-file").value = "";
+    const message = document.getElementById("batch-file-message");
+    message.textContent = "";
+    message.className = "form-message";
+  }
+  previewBatchMatches();
+}
+
+function resolveBatchPresensi(group, gender) {
+  const incoming = [];
+  const errors = [];
+  const previews = [];
+  const addEntry = (query, statusValue, date, location) => {
+    const status = normalizeStatus(statusValue);
+    if (!query || !status) {
+      errors.push(`${location}: nama dan status H/I/S/A wajib diisi dengan benar.`);
+      return;
+    }
+    const matches = findBatchMemberMatches(query, group, gender);
+    if (!matches.length) {
+      errors.push(`${location}: nama "${query}" tidak ditemukan pada kelompok ${group}, ${gender}.`);
+      return;
+    }
+    if (matches.length > 1) {
+      errors.push(`${location}: "${query}" cocok dengan beberapa nama: ${matches.map((member) => member.nama).join(", ")}. Ketik nama lebih lengkap.`);
+      return;
+    }
+    const [member] = matches;
+    const record = {
+      memberId: member.id,
+      nama: member.nama,
+      kelompok: group,
+      tanggal: date,
+      status,
+      metode: "Massal"
+    };
+    if (hasAttendance(record, incoming)) {
+      errors.push(`${location}: presensi ${member.nama} tanggal ${date} sudah ada.`);
+      return;
+    }
+    incoming.push(record);
+    previews.push(`${location}: ${member.nama} — ${date} — ${status}`);
+  };
+
+  if (attendanceBatchFileData) {
+    attendanceBatchFileData.entries.forEach((entry) => {
+      if (entry.extraValues) {
+        errors.push(`Baris ${entry.line}: terdapat data di luar kolom tanggal.`);
+      }
+      entry.statuses.forEach((status, dateIndex) => {
+        if (!status) return;
+        addEntry(entry.name, status, attendanceBatchFileData.dates[dateIndex],
+          `Baris ${entry.line}, kolom ${dateIndex + 2}`);
+      });
+    });
+  } else {
+    const text = document.getElementById("attendance-batch").value.trim();
+    if (!text) return { incoming, errors, previews };
+    const date = document.getElementById("batch-date").value;
+    if (!date) errors.push("Pilih tanggal presensi untuk input ketik.");
+    try {
+      parseCsv(text).forEach((row, index) => {
+        addEntry((row[0] || "").trim(), row[1], date, `Baris ${index + 1}`);
+      });
+    } catch (error) {
+      errors.push(error.message);
+    }
+  }
+  return { incoming, errors, previews };
+}
+
 function previewBatchMatches() {
   const preview = document.getElementById("batch-match-preview");
   const group = document.getElementById("batch-group").value;
   const gender = document.getElementById("batch-gender").value;
   const text = document.getElementById("attendance-batch").value.trim();
-  if (!text) {
+  if (!text && !attendanceBatchFileData) {
     preview.textContent = "";
     preview.className = "form-message batch-match-preview";
     return;
@@ -828,31 +1016,13 @@ function previewBatchMatches() {
     preview.className = "form-message batch-match-preview";
     return;
   }
-  try {
-    const rows = parseCsv(text);
-    let hasIssues = false;
-    preview.textContent = rows.map((row, index) => {
-      const query = (row[0] || "").trim();
-      const status = normalizeStatus(row[1]);
-      if (!query || !status) {
-        hasIssues = true;
-        return `Baris ${index + 1}: format atau status belum valid.`;
-      }
-      const matches = findBatchMemberMatches(query, group, gender);
-      if (!matches.length) {
-        hasIssues = true;
-        return `Baris ${index + 1}: "${query}" tidak ditemukan.`;
-      }
-      if (matches.length > 1) {
-        hasIssues = true;
-        return `Baris ${index + 1}: "${query}" cocok dengan beberapa nama (${matches.map((member) => member.nama).join(", ")}); ketik nama lebih lengkap.`;
-      }
-      return `Baris ${index + 1}: ${query} → ${matches[0].nama} — ${status}`;
-    }).join("\n");
-    preview.className = `form-message batch-match-preview ${hasIssues ? "error-message" : "success-message"}`;
-  } catch (error) {
-    preview.textContent = error.message;
-    preview.className = "form-message batch-match-preview error-message";
+  const { incoming, errors, previews } = resolveBatchPresensi(group, gender);
+  preview.textContent = [...previews, ...errors].join("\n");
+  preview.className = `form-message batch-match-preview ${errors.length ? "error-message" : "success-message"}`;
+  if (!incoming.length && !errors.length) {
+    preview.textContent = attendanceBatchFileData
+      ? "Tidak ada status presensi yang dapat disimpan."
+      : "Masukkan nama dan status untuk melihat pencocokan.";
   }
 }
 
@@ -1167,53 +1337,20 @@ function addBatchPresensi() {
   const message = document.getElementById("attendance-import-message");
   const group = document.getElementById("batch-group").value;
   const gender = document.getElementById("batch-gender").value;
-  const date = document.getElementById("batch-date").value;
   try {
-    if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender) || !date) {
-      throw new Error("Pilih kelompok, jenis kelamin, dan tanggal untuk presensi massal.");
+    if (!GROUPS.includes(group) || !["Pria", "Wanita"].includes(gender)) {
+      throw new Error("Pilih kelompok dan jenis kelamin untuk presensi massal.");
     }
-    const rows = parseCsv(document.getElementById("attendance-batch").value);
-    if (!rows.length) throw new Error("Ketik nama dan status presensi terlebih dahulu.");
-    const incoming = [];
-    const errors = [];
-    rows.forEach((row, index) => {
-      const query = (row[0] || "").trim();
-      const status = normalizeStatus(row[1]);
-      const line = index + 1;
-      if (!query || !status) {
-        errors.push(`Baris ${line}: gunakan format Nama,Status (H/I/S/A).`);
-        return;
-      }
-      const matches = findBatchMemberMatches(query, group, gender);
-      if (!matches.length) {
-        errors.push(`Baris ${line}: tidak ada nama yang cocok dengan "${query}" pada kelompok ${group}, ${gender}.`);
-        return;
-      }
-      if (matches.length > 1) {
-        errors.push(`Baris ${line}: "${query}" cocok dengan beberapa nama: ${matches.map((member) => member.nama).join(", ")}. Ketik nama yang lebih lengkap.`);
-        return;
-      }
-      const [member] = matches;
-      const record = {
-        memberId: member.id,
-        nama: member.nama,
-        kelompok: group,
-        tanggal: date,
-        status,
-        metode: "Massal"
-      };
-      if (hasAttendance(record, incoming)) {
-        errors.push(`Baris ${line}: presensi ${member.nama} untuk tanggal ini sudah ada.`);
-      } else {
-        incoming.push(record);
-      }
-    });
+    const { incoming, errors } = resolveBatchPresensi(group, gender);
     if (errors.length) throw new Error(errors.join("\n"));
     if (!incoming.length) throw new Error("Tidak ada presensi baru untuk disimpan.");
     presensiData.push(...incoming);
     saveAttendance();
     document.getElementById("attendance-batch").value = "";
+    document.getElementById("attendance-batch-file").value = "";
+    attendanceBatchFileData = null;
     document.getElementById("batch-match-preview").textContent = "";
+    document.getElementById("batch-file-message").textContent = "";
     message.textContent = `${incoming.length} presensi berhasil disimpan: ${incoming.map((record) => record.nama).join(", ")}.`;
     message.className = "form-message success-message";
     renderRiwayat();

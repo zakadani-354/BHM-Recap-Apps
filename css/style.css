@@ -51,6 +51,9 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
 .attendance-mode-switch .btn-secondary.active{border-color:var(--brand);background:var(--brand);color:#fff}
 .batch-match-preview{min-height:0;margin:10px 0 14px;line-height:1.7}
 #attendance-batch{width:100%;margin:8px 0 4px;padding:12px;border:1.5px solid var(--border);border-radius:10px;font:inherit;resize:vertical}
+.batch-file-import{display:grid;gap:7px;margin:14px 0}
+.batch-file-import label{font-size:13px;font-weight:700}
+.batch-file-import input{width:100%;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:#fff;font:inherit}
 .member-edit-actions{display:flex;gap:10px;flex-wrap:wrap}
 @media(max-width:600px){
   #tab-input .form-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
