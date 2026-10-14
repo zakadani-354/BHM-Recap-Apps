@@ -57,11 +57,37 @@ async function supabaseRequest(config, path, options = {}) {
   }
   const responseText = await response.text();
   if (!response.ok) {
-    console.error(`Supabase request failed with HTTP ${response.status} at ${path}.`);
+    let diagnostic = {};
+    try {
+      const responseBody = JSON.parse(responseText);
+      diagnostic = {
+        code: typeof responseBody.code === "string" ? responseBody.code.slice(0, 80) : undefined,
+        message: typeof responseBody.message === "string" ? responseBody.message.slice(0, 400) : undefined,
+        hint: typeof responseBody.hint === "string" ? responseBody.hint.slice(0, 400) : undefined
+      };
+    } catch {
+      diagnostic = { response: "Non-JSON error response" };
+    }
+    console.error("Supabase request failed.", {
+      status: response.status,
+      path,
+      ...diagnostic
+    });
+    const missingDatabaseObject = ["PGRST202", "PGRST205", "42883", "42P01"]
+      .includes(diagnostic.code);
+    const authorizationFailure = [401, 403].includes(response.status)
+      || diagnostic.code === "42501";
+    let message = `Supabase menolak permintaan (HTTP ${response.status}`
+      + `${diagnostic.code ? `, ${diagnostic.code}` : ""}). Periksa log Function di Vercel.`;
+    if (missingDatabaseObject) {
+      message = "Fungsi atau tabel Supabase belum ditemukan. Jalankan ulang supabase/schema.sql di SQL Editor, lalu coba lagi.";
+    } else if (authorizationFailure) {
+      message = "Supabase menolak akses server. Periksa SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY di Vercel, lalu redeploy.";
+    }
     throw new ApiError(
       502,
       "DATABASE_ERROR",
-      "Database bersama gagal memproses permintaan. Pastikan skema Supabase sudah dipasang."
+      message
     );
   }
   if (!responseText) return null;
