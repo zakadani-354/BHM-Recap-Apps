@@ -84,27 +84,34 @@
     </div>
     <div class="dashboard-charts">
       <div class="chart-column">
-        <h3>Persentase Hadir</h3>
-        <div id="attendance-chart" class="attendance-chart" role="img" aria-label="Diagram batang rata-rata kehadiran tiap kelompok"></div>
+        <h3>Persentase Kehadiran per Kelompok</h3>
+        <div id="attendance-chart" class="attendance-chart" role="group" aria-label="Diagram batang rata-rata kehadiran tiap kelompok"></div>
       </div>
       <div class="chart-column">
-        <h3>Rincian Status</h3>
+        <h3>Perbandingan Status Presensi</h3>
+        <p id="status-chart-note" class="section-help status-chart-note"></p>
         <div id="status-donut" class="donut-layout"></div>
       </div>
     </div>
   </section>
 
   <p class="section-help dashboard-note">Pada tanggal yang sudah memiliki minimal satu catatan di suatu kelompok, jamaah yang belum diinput otomatis dihitung Alpha. Catatan otomatis hanya digunakan untuk perhitungan dashboard. Jamaah tanpa sesi tercatat selama periode terpilih dihitung 0%; 100% berarti semua catatannya berstatus Hadir.</p>
-  <h3>Jumlah Jamaah dengan Tingkat Kehadiran 0% per Kelompok</h3>
+  <section class="attendance-rate-summary" aria-labelledby="dash-zero-title">
+  <h3 id="dash-zero-title">Tingkat Kehadiran 0%</h3>
+  <p id="dash-zero-period" class="section-help"></p>
   <table class="data-table">
-    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah 0%</th></tr></thead>
+    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah</th><th>Rincian</th></tr></thead>
     <tbody id="dash-zero-table"></tbody>
   </table>
-  <h3 class="dashboard-subheading">Jumlah Jamaah dengan Tingkat Kehadiran 100% per Kelompok</h3>
+  </section>
+  <section class="attendance-rate-summary" aria-labelledby="dash-full-title">
+  <h3 id="dash-full-title">Tingkat Kehadiran 100%</h3>
+  <p id="dash-full-period" class="section-help"></p>
   <table class="data-table">
-    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah 100%</th></tr></thead>
+    <thead><tr><th>Kelompok</th><th>Jumlah Jamaah</th><th>Rincian</th></tr></thead>
     <tbody id="dash-full-table"></tbody>
   </table>
+  </section>
 </section>
 
 <!-- PRESENSI -->
