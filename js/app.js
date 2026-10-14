@@ -670,6 +670,118 @@ function dashboardGroupColor(group) {
   return colors[GROUPS.indexOf(group) % colors.length] || colors[0];
 }
 
+function showDashboardDetails(type) {
+  const title = type === "zero" ? "Tingkat Kehadiran 0%" : "Tingkat Kehadiran 100%";
+  const dialog = document.getElementById("dashboard-detail-dialog");
+  document.getElementById("dashboard-detail-title").textContent = title;
+  const sections = [...(dashboardAttendanceDetails[type] || new Map()).entries()];
+  document.getElementById("dashboard-detail-content").innerHTML = sections.map(([group, names]) => `
+    <section class="dashboard-detail-group">
+      <h3>${escapeHtml(group)} <span>(${names.length})</span></h3>
+      ${names.length
+    ? `<ul class="dashboard-member-list">${names.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}</ul>`
+    : '<p class="section-help">Tidak ada jamaah.</p>'}
+    </section>`).join("");
+  dialog.showModal();
+}
+
+function closeDashboardDetails() {
+  document.getElementById("dashboard-detail-dialog").close();
+}
+
+let dashboardAttendanceDetails = { zero: new Map(), full: new Map() };
+
+function dashboardExportFilename(extension) {
+  const group = document.getElementById("f-group").value;
+  const mode = document.getElementById("f-bulan-mode").value;
+  const months = mode === "month"
+    ? [document.getElementById("f-bulan").value]
+    : [document.getElementById("f-bulan-mulai").value, document.getElementById("f-bulan-sampai").value];
+  const suffix = [group, ...months.filter(Boolean)]
+    .filter(Boolean)
+    .join("-")
+    .replace(/[^\w-]+/g, "-")
+    .toLowerCase();
+  return `dashboard${suffix ? `-${suffix}` : ""}.${extension}`;
+}
+
+async function createDashboardImage() {
+  if (typeof window.html2canvas !== "function") {
+    throw new Error("Pustaka gambar tidak tersedia. Periksa koneksi internet lalu muat ulang.");
+  }
+  return window.html2canvas(document.getElementById("dashboard-export"), {
+    backgroundColor: "#f6f8fa",
+    scale: 2,
+    useCORS: true
+  });
+}
+
+async function shareDashboard(format) {
+  const message = document.getElementById("dashboard-share-message");
+  message.textContent = "Menyiapkan dashboard...";
+  message.className = "form-message";
+  try {
+    const canvas = await createDashboardImage();
+    let file;
+    if (format === "pdf") {
+      if (!window.jspdf?.jsPDF) {
+        throw new Error("Pustaka PDF tidak tersedia. Periksa koneksi internet lalu muat ulang.");
+      }
+      const pdf = new window.jspdf.jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = 180;
+      const pageHeight = 260;
+      const sliceHeight = Math.floor(canvas.width * pageHeight / pageWidth);
+      let pageIndex = 0;
+      for (let y = 0; y < canvas.height; y += sliceHeight) {
+        const height = Math.min(sliceHeight, canvas.height - y);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = height;
+        const context = pageCanvas.getContext("2d");
+        if (!context) throw new Error("Canvas PDF tidak tersedia di browser.");
+        context.drawImage(canvas, 0, y, canvas.width, height, 0, 0, canvas.width, height);
+        if (pageIndex > 0) pdf.addPage();
+        pdf.addImage(pageCanvas.toDataURL("image/png"), "PNG", 15, 18, pageWidth, height * pageWidth / canvas.width);
+        pageIndex += 1;
+      }
+      file = new File([pdf.output("blob")], dashboardExportFilename("pdf"), { type: "application/pdf" });
+    } else {
+      const blob = await new Promise((resolve, reject) => canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("Gambar dashboard gagal dibuat."));
+      }, "image/png"));
+      file = new File([blob], dashboardExportFilename("png"), { type: "image/png" });
+    }
+
+    if (navigator.canShare?.({ files: [file] }) && navigator.share) {
+      try {
+        await navigator.share({ files: [file], title: "Dashboard BHM" });
+        message.textContent = "Dashboard berhasil dibagikan.";
+        message.className = "form-message success-message";
+        return;
+      } catch (error) {
+        if (error.name === "AbortError") {
+          message.textContent = "Berbagi dibatalkan.";
+          return;
+        }
+        throw error;
+      }
+    }
+
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    message.textContent = `${file.name} berhasil diunduh.`;
+    message.className = "form-message success-message";
+  } catch (error) {
+    message.textContent = `Dashboard gagal dibagikan: ${error.message}`;
+    message.className = "form-message error-message";
+  }
+}
+
 function renderStatusDonut(records, meetingCount, showMeetings) {
   const statuses = [
     { label: "Hadir", color: "#059669" },
@@ -801,6 +913,16 @@ function renderDashboard() {
     .reduce((total, counts) => total + counts.zero.length, 0);
   const fullAttendanceCount = [...groupAttendanceCounts.values()]
     .reduce((total, counts) => total + counts.full.length, 0);
+  dashboardAttendanceDetails = {
+    zero: new Map([...groupAttendanceCounts].map(([group, counts]) => [
+      group,
+      [...counts.zero].sort((first, second) => first.localeCompare(second, "id"))
+    ])),
+    full: new Map([...groupAttendanceCounts].map(([group, counts]) => [
+      group,
+      [...counts.full].sort((first, second) => first.localeCompare(second, "id"))
+    ]))
+  };
   const formatPercentage = (value) => `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
   const groupScopeLabel = selectedGroup ? "Kelompok Terpilih" : "Seluruh Kelompok";
 
@@ -810,13 +932,16 @@ function renderDashboard() {
     { title: "Tingkat Kehadiran", value: formatPercentage(attendanceRate), meta: groupScopeLabel, type: "percent" },
     { title: "Kehadiran Pria", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} jamaah pria · ${groupScopeLabel}`, type: "percent" },
     { title: "Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} jamaah wanita · ${groupScopeLabel}`, type: "percent" },
-    { title: "Tingkat Kehadiran 0%", value: zeroAttendanceCount, meta: groupScopeLabel, type: "count" },
-    { title: "Tingkat Kehadiran 100%", value: fullAttendanceCount, meta: groupScopeLabel, type: "count" }
+    { title: "Tingkat Kehadiran 0%", value: zeroAttendanceCount, meta: groupScopeLabel, type: "zero" },
+    { title: "Tingkat Kehadiran 100%", value: fullAttendanceCount, meta: groupScopeLabel, type: "full" }
   ].map(({ title, value, meta, type }) => `
     <article class="card dashboard-kpi-card ${type === "percent" ? "dashboard-kpi-percent" : ""}">
       <h3>${escapeHtml(title)}</h3>
       <p class="value">${escapeHtml(value)}</p>
       <p class="meta">${escapeHtml(meta)}</p>
+      ${type === "zero" || type === "full"
+    ? `<button class="btn-secondary dashboard-detail-button" type="button" onclick="showDashboardDetails('${type}')" ${value ? "" : "disabled"}>Rincian</button>`
+    : ""}
     </article>`).join("");
 
   document.getElementById("attendance-chart").innerHTML = chartGroups.length

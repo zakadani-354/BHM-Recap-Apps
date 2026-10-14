@@ -49,8 +49,14 @@
 
 <!-- DASHBOARD -->
 <section id="page-dashboard" class="page">
-  <h1>Dashboard <span class="subtitle">Resume Presensi per Periode per Kelompok</span></h1>
+  <div class="dashboard-share-actions">
+    <button class="btn-secondary" type="button" onclick="shareDashboard('image')">Bagikan sebagai Gambar</button>
+    <button class="btn-secondary" type="button" onclick="shareDashboard('pdf')">Bagikan sebagai PDF</button>
+    <p id="dashboard-share-message" class="form-message" role="status" aria-live="polite"></p>
+  </div>
 
+  <div id="dashboard-export">
+  <h1>Dashboard <span class="subtitle">Resume Presensi per Periode per Kelompok</span></h1>
   <div class="filter-row">
     <label>Kelompok:
       <select id="f-group" onchange="dashboardGroupChanged()">
@@ -97,6 +103,15 @@
   </section>
 
   <p class="section-help dashboard-note">Pada tanggal yang sudah memiliki minimal satu catatan di suatu kelompok, jamaah yang belum diinput otomatis dihitung Alpha untuk perhitungan dashboard. Pengajian dihitung ketika terdapat catatan presensi pada tanggal tersebut.</p>
+  </div>
+
+  <dialog id="dashboard-detail-dialog" class="dashboard-detail-dialog" aria-labelledby="dashboard-detail-title">
+    <div class="dashboard-detail-heading">
+      <h2 id="dashboard-detail-title"></h2>
+      <button class="btn-secondary" type="button" onclick="closeDashboardDetails()">Tutup</button>
+    </div>
+    <div id="dashboard-detail-content"></div>
+  </dialog>
 </section>
 
 <!-- PRESENSI -->
@@ -383,9 +398,9 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>
-
