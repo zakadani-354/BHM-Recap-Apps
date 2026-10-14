@@ -59,8 +59,20 @@
         <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
       </select>
     </label>
-    <label>Bulan:
+    <label>Filter bulan:
+      <select id="f-bulan-mode" onchange="dashboardMonthModeChanged()" disabled>
+        <option value="month">Per bulan</option>
+        <option value="period">Periode beberapa bulan</option>
+      </select>
+    </label>
+    <label id="f-bulan-single-label">Bulan:
       <input type="month" id="f-bulan" onchange="renderDashboard()" disabled>
+    </label>
+    <label id="f-bulan-start-label" class="hidden">Dari bulan:
+      <input type="month" id="f-bulan-mulai" onchange="dashboardPeriodChanged('start')" disabled>
+    </label>
+    <label id="f-bulan-end-label" class="hidden">Sampai bulan:
+      <input type="month" id="f-bulan-sampai" onchange="dashboardPeriodChanged('end')" disabled>
     </label>
   </div>
 
@@ -84,7 +96,7 @@
     </div>
   </section>
 
-  <p class="section-help dashboard-note">Pada tanggal yang sudah memiliki minimal satu catatan di suatu kelompok, jamaah yang belum diinput otomatis dihitung Alpha. Catatan otomatis hanya digunakan untuk perhitungan dashboard. Jamaah tanpa sesi tercatat selama periode terpilih dihitung 0%; 100% berarti semua catatannya berstatus Hadir.</p>
+  <p class="section-help dashboard-note">Pada tanggal yang sudah memiliki minimal satu catatan di suatu kelompok, jamaah yang belum diinput otomatis dihitung Alpha untuk perhitungan dashboard. Pengajian dihitung ketika terdapat catatan presensi pada tanggal tersebut.</p>
   <section class="attendance-rate-summary" aria-labelledby="dash-zero-title">
   <h3 id="dash-zero-title">Tingkat Kehadiran 0%</h3>
   <p id="dash-zero-period" class="section-help"></p>

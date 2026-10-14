@@ -532,10 +532,11 @@ function createDashboardMemberLookup() {
   };
 }
 
-function dashboardRecordsForPeriod(selectedMonth, selectedGroup, memberLookup) {
+function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup) {
   const records = presensiData.filter((record) => {
     const recordMonth = record.tanggal.slice(0, 7);
-    return (!selectedMonth || recordMonth === selectedMonth)
+    return (!startMonth || recordMonth >= startMonth)
+      && (!endMonth || recordMonth <= endMonth)
       && (!selectedGroup || record.kelompok === selectedGroup);
   });
   const sessionMembers = new Map();
@@ -572,12 +573,32 @@ function dashboardRecordsForPeriod(selectedMonth, selectedGroup, memberLookup) {
 
 function selectedPeriodRecords() {
   const selectedGroup = document.getElementById("f-group").value;
+  const modeFilter = document.getElementById("f-bulan-mode");
   const monthFilter = document.getElementById("f-bulan");
-  const selectedMonth = selectedGroup ? monthFilter.value : "";
+  const startFilter = document.getElementById("f-bulan-mulai");
+  const endFilter = document.getElementById("f-bulan-sampai");
+  const mode = modeFilter.value;
+  modeFilter.disabled = !selectedGroup;
   monthFilter.disabled = !selectedGroup;
-  if (!selectedGroup) monthFilter.value = "";
+  startFilter.disabled = !selectedGroup;
+  endFilter.disabled = !selectedGroup;
+  document.getElementById("f-bulan-single-label").classList.toggle("hidden", mode !== "month");
+  document.getElementById("f-bulan-start-label").classList.toggle("hidden", mode !== "period");
+  document.getElementById("f-bulan-end-label").classList.toggle("hidden", mode !== "period");
+  if (!selectedGroup) {
+    monthFilter.value = "";
+    startFilter.value = "";
+    endFilter.value = "";
+  }
+  const selectedMonth = selectedGroup && mode === "month" ? monthFilter.value : "";
+  const startMonth = selectedGroup
+    ? (mode === "month" ? selectedMonth : startFilter.value)
+    : "";
+  const endMonth = selectedGroup
+    ? (mode === "month" ? selectedMonth : endFilter.value)
+    : "";
   const memberLookup = createDashboardMemberLookup();
-  const allPeriodRecords = dashboardRecordsForPeriod(selectedMonth, "", memberLookup);
+  const allPeriodRecords = dashboardRecordsForPeriod(startMonth, endMonth, "", memberLookup);
   const allMonthRecords = selectedGroup
     ? allPeriodRecords.filter((record) => record.kelompok === selectedGroup)
     : allPeriodRecords;
@@ -610,12 +631,32 @@ function selectedPeriodRecords() {
     chartGroups,
     allMonthRecords,
     selectedMonth,
+    startMonth,
+    endMonth,
+    mode,
     selectedGroup,
     memberLookup
   };
 }
 
 function dashboardGroupChanged() {
+  renderDashboard();
+}
+
+function dashboardMonthModeChanged() {
+  renderDashboard();
+}
+
+function dashboardPeriodChanged(changedInput) {
+  const startInput = document.getElementById("f-bulan-mulai");
+  const endInput = document.getElementById("f-bulan-sampai");
+  if (startInput.value && endInput.value && startInput.value > endInput.value) {
+    if (changedInput === "start") {
+      endInput.value = startInput.value;
+    } else {
+      startInput.value = endInput.value;
+    }
+  }
   renderDashboard();
 }
 
@@ -694,6 +735,9 @@ function renderDashboard() {
     chartGroups,
     allMonthRecords,
     selectedMonth,
+    startMonth,
+    endMonth,
+    mode,
     selectedGroup,
     memberLookup
   } = selectedPeriodRecords();
@@ -703,9 +747,15 @@ function renderDashboard() {
       statusCounts.set(record.status, statusCounts.get(record.status) + 1);
     }
   });
-  const totalStatusRecords = [...statusCounts.values()].reduce((sum, count) => sum + count, 0);
   const totalMeetings = new Set(allMonthRecords.map((record) =>
     selectedGroup ? record.tanggal : `${record.kelompok}\u0000${record.tanggal}`)).size;
+  const totalAttendance = allMonthRecords.filter((record) => record.status === "Hadir").length;
+  const meetingSessions = new Set(allMonthRecords.map((record) =>
+    `${record.kelompok}\u0000${record.tanggal}`));
+  const totalCapacity = [...meetingSessions].reduce((capacity, sessionKey) => {
+    const group = sessionKey.split("\u0000")[0];
+    return capacity + (memberLookup.membersByGroup.get(group)?.length || 0);
+  }, 0);
 
   const memberRecords = new Map();
   allMonthRecords.forEach((record) => {
@@ -719,18 +769,12 @@ function renderDashboard() {
   const eligibleMembers = jamaahData.filter((member) =>
     member.peran.toLowerCase() === "jamaah"
       && (!selectedGroup || member.kelompok === selectedGroup));
-  const genderTotals = { Pria: 0, Wanita: 0 };
-  const genderPresentIds = { Pria: new Set(), Wanita: new Set() };
-  eligibleMembers.forEach((member) => {
-    if (genderTotals[member.jenisKelamin] !== undefined) {
-      genderTotals[member.jenisKelamin] += 1;
-    }
-  });
+  const genderAttendance = { Pria: 0, Wanita: 0 };
   allMonthRecords.forEach((record) => {
     if (record.status !== "Hadir") return;
     const member = memberLookup.find(record);
-    if (member && genderPresentIds[member.jenisKelamin]) {
-      genderPresentIds[member.jenisKelamin].add(member.id);
+    if (member && genderAttendance[member.jenisKelamin] !== undefined) {
+      genderAttendance[member.jenisKelamin] += 1;
     }
   });
   const groupAttendanceCounts = new Map(groups.map(({ group }) => [
@@ -745,7 +789,11 @@ function renderDashboard() {
     if (rate === 0) counts.zero.push(member.nama);
     if (rate === 1) counts.full.push(member.nama);
   });
-  const periodLabel = selectedMonth ? `Bulan ${selectedMonth}` : "Seluruh bulan";
+  const periodLabel = selectedMonth
+    ? `Bulan ${selectedMonth}`
+    : mode === "period" && (startMonth || endMonth)
+      ? `Periode ${startMonth || "tanpa batas awal"} s.d. ${endMonth || "tanpa batas akhir"}`
+      : "Seluruh bulan";
   dashboardDetailNames = { zero: [], full: [] };
   const rowsByAttendance = (attendanceType) => groups.map(({ group }, index) => {
     const names = (groupAttendanceCounts.get(group)?.[attendanceType] || [])
@@ -763,21 +811,21 @@ function renderDashboard() {
     </tr>`;
   }).join("");
 
-  const totalHadir = statusCounts.get("Hadir");
-  const totalPria = genderTotals.Pria;
-  const totalWanita = genderTotals.Wanita;
-  const priaHadir = genderPresentIds.Pria.size;
-  const wanitaHadir = genderPresentIds.Wanita.size;
-  const percentHadir = totalStatusRecords ? Math.round(totalHadir / totalStatusRecords * 100) : 0;
-  const percentPria = totalPria ? Math.round(priaHadir / totalPria * 100) : 0;
-  const percentWanita = totalWanita ? Math.round(wanitaHadir / totalWanita * 100) : 0;
+  const attendanceRate = totalCapacity ? totalAttendance / totalCapacity * 100 : 0;
+  const percentPria = totalAttendance ? genderAttendance.Pria / totalAttendance * 100 : 0;
+  const percentWanita = totalAttendance ? genderAttendance.Wanita / totalAttendance * 100 : 0;
+  const averageAttendance = totalMeetings ? totalAttendance / totalMeetings : 0;
+  const formatPercentage = (value) => `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
+  const formatAverage = (value) => value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
 
   document.getElementById("dashboard-cards").innerHTML = [
     { title: "Jumlah Jamaah", value: eligibleMembers.length, meta: selectedGroup ? "Jamaah di kelompok terpilih" : "Seluruh jamaah terdaftar", type: "count" },
-    { title: "Total Pertemuan", value: totalMeetings, meta: selectedMonth ? `Bulan ${selectedMonth}` : "Seluruh bulan", type: "count" },
-    { title: "Total Hadir", value: `${percentHadir}%`, meta: `${totalHadir} Total Hadir`, type: "percent" },
-    { title: "Kehadiran Pria", value: `${percentPria}%`, meta: `${priaHadir} hadir dari ${totalPria} pria`, type: "percent" },
-    { title: "Kehadiran Wanita", value: `${percentWanita}%`, meta: `${wanitaHadir} hadir dari ${totalWanita} wanita`, type: "percent" }
+    { title: "Total Pertemuan", value: totalMeetings, meta: periodLabel, type: "count" },
+    { title: "Total Kehadiran", value: totalAttendance, meta: "Jumlah seluruh presensi berstatus Hadir", type: "count" },
+    { title: "Persentase Tingkat Kehadiran", value: formatPercentage(attendanceRate), meta: `${totalAttendance} dari ${totalCapacity} kapasitas`, type: "percent" },
+    { title: "Persentase Kehadiran Pria", value: formatPercentage(percentPria), meta: `${genderAttendance.Pria} dari ${totalAttendance} kehadiran`, type: "percent" },
+    { title: "Persentase Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderAttendance.Wanita} dari ${totalAttendance} kehadiran`, type: "percent" },
+    { title: "Rata-Rata Jamaah Hadir per Pengajian", value: formatAverage(averageAttendance), meta: `${totalAttendance} kehadiran ÷ ${totalMeetings} pengajian`, type: "count" }
   ].map(({ title, value, meta, type }) => `
     <article class="card dashboard-kpi-card ${type === "percent" ? "dashboard-kpi-percent" : ""}">
       <h3>${escapeHtml(title)}</h3>
@@ -798,11 +846,9 @@ function renderDashboard() {
       </button>`;
     }).join("")
     : '<p class="chart-empty">Belum ada data presensi.</p>';
-  const showMeetingSummary = Boolean(selectedGroup);
-  document.getElementById("status-chart-note").textContent = showMeetingSummary
-    ? `${totalMeetings} pertemuan terfilter · persentase status kelompok ${selectedGroup}${selectedMonth ? ` pada bulan ${selectedMonth}` : " pada seluruh bulan"}.`
-    : "Persentase komposisi status pada seluruh kelompok dan bulan.";
-  renderStatusDonut(allMonthRecords, totalMeetings, showMeetingSummary);
+  document.getElementById("status-chart-note").textContent =
+    `${totalMeetings} pengajian pada ${periodLabel.toLocaleLowerCase("id-ID")} · komposisi status presensi terfilter.`;
+  renderStatusDonut(allMonthRecords, totalMeetings, true);
   document.getElementById("dash-zero-period").textContent = periodLabel;
   document.getElementById("dash-full-period").textContent = periodLabel;
   document.getElementById("dash-zero-table").innerHTML = rowsByAttendance("zero");
@@ -1797,6 +1843,7 @@ async function changeAccountPassword() {
   message.className = "form-message success-message";
 }
 
+document.getElementById("f-bulan-mode").value = "month";
 document.getElementById("p-tanggal").value = localDateString();
 document.getElementById("batch-date").value = localDateString();
 window.addEventListener("focus", () => {
