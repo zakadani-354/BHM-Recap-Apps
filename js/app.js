@@ -51,6 +51,32 @@ function normalizeGender(value) {
   return "Tidak diatur";
 }
 
+function normalizeNameForMatch(value) {
+  return String(value || "")
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase("id-ID");
+}
+
+function normalizeGroupForMatch(value) {
+  return String(value || "").trim().toLocaleLowerCase("id-ID");
+}
+
+function isDuplicateMember(member, existingMembers = jamaahData) {
+  const normalizedName = normalizeNameForMatch(member.nama);
+  if (!normalizedName) return false;
+  return existingMembers.some((existing) =>
+    normalizeNameForMatch(existing.nama) === normalizedName
+      && normalizeGroupForMatch(existing.kelompok) === normalizeGroupForMatch(member.kelompok));
+}
+
+function attendanceBelongsToMember(record, member) {
+  if (record.memberId && member.id && record.memberId === member.id) return true;
+  return normalizeNameForMatch(record.nama) === normalizeNameForMatch(member.nama)
+    && normalizeGroupForMatch(record.kelompok) === normalizeGroupForMatch(member.kelompok);
+}
+
 function readArray(key) {
   const stored = localStorage.getItem(key);
   if (!stored) return [];
@@ -293,12 +319,43 @@ function isInGenderFilter(member, selectedGender) {
   return !selectedGender || member?.jenisKelamin === selectedGender;
 }
 
+function dashboardRecordsForMonth(month, selectedGroup) {
+  const records = presensiData.filter((record) => record.tanggal.startsWith(month)
+    && (!selectedGroup || record.kelompok === selectedGroup));
+  const sessionMembers = new Map();
+  records.forEach((record) => {
+    const sessionKey = `${record.kelompok}\u0000${record.tanggal}`;
+    if (!sessionMembers.has(sessionKey)) sessionMembers.set(sessionKey, new Set());
+    const member = memberForRecord(record);
+    if (member) sessionMembers.get(sessionKey).add(member.id);
+  });
+
+  const automaticAlpa = [];
+  sessionMembers.forEach((attendedMemberIds, sessionKey) => {
+    const [group, date] = sessionKey.split("\u0000");
+    jamaahData
+      .filter((member) => member.peran.toLowerCase() === "jamaah" && member.kelompok === group)
+      .forEach((member) => {
+        if (!attendedMemberIds.has(member.id)) {
+          automaticAlpa.push({
+            memberId: member.id,
+            nama: member.nama,
+            kelompok: member.kelompok,
+            tanggal: date,
+            status: "Alpa",
+            metode: "Otomatis"
+          });
+        }
+      });
+  });
+  return [...records, ...automaticAlpa];
+}
+
 function selectedMonthRecords() {
   const month = document.getElementById("f-bulan").value || currentMonth();
   const selectedGender = document.getElementById("f-gender").value;
   const selectedGroup = document.getElementById("f-group").value;
-  const allMonthRecords = presensiData.filter((record) => record.tanggal.startsWith(month)
-    && (!selectedGroup || record.kelompok === selectedGroup));
+  const allMonthRecords = dashboardRecordsForMonth(month, selectedGroup);
   const monthRecords = allMonthRecords.filter((record) =>
     isInGenderFilter(memberForRecord(record), selectedGender));
   const groups = (selectedGroup ? [selectedGroup] : GROUPS).map((group) => {
@@ -746,12 +803,12 @@ function handleBarcodeScan(value) {
 }
 
 function findBatchMemberMatches(query, group, gender) {
-  const normalizedQuery = query.toLocaleLowerCase();
+  const normalizedQuery = normalizeNameForMatch(query);
   const candidates = jamaahData.filter((member) => member.kelompok === group
     && member.jenisKelamin === gender
-    && member.nama.toLocaleLowerCase().includes(normalizedQuery));
+    && normalizeNameForMatch(member.nama).includes(normalizedQuery));
   const exactMatches = candidates.filter((member) =>
-    member.nama.toLocaleLowerCase() === normalizedQuery);
+    normalizeNameForMatch(member.nama) === normalizedQuery);
   return exactMatches.length ? exactMatches : candidates;
 }
 
@@ -877,9 +934,14 @@ function addPresensi() {
 }
 
 function hasAttendance(record, pending = []) {
-  return [...presensiData, ...pending].some((item) => item.nama.toLowerCase() === record.nama.toLowerCase()
-    && item.kelompok === record.kelompok
-    && item.tanggal === record.tanggal);
+  const recordName = normalizeNameForMatch(record.nama);
+  if (!recordName || !record.kelompok || !record.tanggal) return false;
+  return [...presensiData, ...pending].some((item) => {
+    const sameMemberId = record.memberId && item.memberId && item.memberId === record.memberId;
+    const sameNameAndGroup = normalizeNameForMatch(item.nama) === recordName
+      && normalizeGroupForMatch(item.kelompok) === normalizeGroupForMatch(record.kelompok);
+    return (sameMemberId || sameNameAndGroup) && item.tanggal === record.tanggal;
+  });
 }
 
 function addJamaah() {
@@ -895,8 +957,7 @@ function addJamaah() {
     alert("Isi nama, pilih kelompok, dan tentukan jenis kelamin.");
     return;
   }
-  if (jamaahData.some((item) => item.nama.toLowerCase() === member.nama.toLowerCase()
-      && item.kelompok === member.kelompok)) {
+  if (isDuplicateMember(member)) {
     alert("Nama tersebut sudah terdaftar pada kelompok yang dipilih.");
     return;
   }
@@ -915,7 +976,7 @@ function removeJamaah(index) {
   }
   const member = jamaahData[index];
   if (!member) return;
-  if (presensiData.some((record) => record.nama === member.nama && record.kelompok === member.kelompok)) {
+  if (presensiData.some((record) => attendanceBelongsToMember(record, member))) {
     alert("Data jamaah memiliki riwayat presensi dan tidak dapat dihapus.");
     return;
   }
@@ -1003,8 +1064,7 @@ async function importFileData() {
           || !["Pria", "Wanita", "Tidak diatur"].includes(member.jenisKelamin)
           || !["Jamaah", "Pengurus"].includes(member.peran)) {
         errors.push(`Baris ${index + (hasHeader ? 2 : 1)}: nama, kelompok, jenis kelamin, atau peran tidak valid.`);
-      } else if ([...jamaahData, ...incoming].some((item) => item.nama.toLowerCase() === member.nama.toLowerCase()
-          && item.kelompok === member.kelompok)) {
+      } else if (isDuplicateMember(member, [...jamaahData, ...incoming])) {
         errors.push(`Baris ${index + (hasHeader ? 2 : 1)}: ${member.nama} sudah terdaftar.`);
       } else {
         incoming.push(member);
