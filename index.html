@@ -249,6 +249,35 @@
       </div>
       <button type="submit" class="btn-primary"><i class="fa-solid fa-user-plus"></i> Tambah</button>
     </form>
+    <form id="member-edit-form" class="form-box hidden" aria-labelledby="member-edit-title"
+      onsubmit="event.preventDefault(); saveJamaahEdit();">
+      <h2 id="member-edit-title">Edit Data Jamaah</h2>
+      <input id="member-edit-id" type="hidden">
+      <div class="form-row">
+        <label>Nama Lengkap <input id="member-edit-name" type="text" required></label>
+        <label>Kelompok
+          <select id="member-edit-group" required>
+            <option value="">Pilih...</option>
+            <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+            <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+          </select>
+        </label>
+        <label>Jenis Kelamin
+          <select id="member-edit-gender" required>
+            <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
+          </select>
+        </label>
+        <label>Peran
+          <select id="member-edit-role" required><option>Jamaah</option><option>Pengurus</option></select>
+        </label>
+      </div>
+      <p class="section-help">Perubahan ini tidak mengubah riwayat presensi yang sudah tercatat.</p>
+      <div class="member-edit-actions">
+        <button type="submit" class="btn-primary">Simpan Perubahan</button>
+        <button type="button" class="btn-secondary" onclick="cancelJamaahEdit()">Batal</button>
+      </div>
+      <p id="member-edit-message" class="form-message" role="status"></p>
+    </form>
     <div class="filter-row member-list-filters">
       <label>Filter Kelompok:
         <select id="jamaah-filter-group" onchange="renderJamaah()">
@@ -264,7 +293,7 @@
       </label>
       <button id="delete-selected-members" class="table-action" type="button"
         onclick="deleteSelectedMembers()" disabled>Hapus dipilih (0)</button>
-      <p id="jamaah-delete-message" class="form-message" role="status"></p>
+      <p id="jamaah-action-message" class="form-message" role="status"></p>
     </div>
     <table class="data-table">
       <thead><tr>

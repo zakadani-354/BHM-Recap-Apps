@@ -548,6 +548,7 @@ function renderJamaah() {
       <td>${escapeHtml(member.peran)}</td>
       <td class="member-actions">
         <button class="table-action" type="button" onclick="selectMemberBarcode(${index})">Barcode</button>
+        ${isAdmin ? `<button class="table-action member-edit-button" type="button" onclick="editJamaah(${index})">Edit</button>` : ""}
         ${isAdmin ? `<button class="table-action" type="button" onclick="removeJamaah(${index})" aria-label="Hapus ${escapeHtml(member.nama)}">Hapus</button>` : ""}
       </td>
     </tr>`).join("") || `<tr><td colspan="${isAdmin ? 6 : 5}">Tidak ada data jamaah yang sesuai filter.</td></tr>`;
@@ -593,7 +594,7 @@ function deleteSelectedMembers() {
     (record.memberId && record.memberId === member.id)
       || (record.nama.toLowerCase() === member.nama.toLowerCase()
         && record.kelompok === member.kelompok)));
-  const message = document.getElementById("jamaah-delete-message");
+  const message = document.getElementById("jamaah-action-message");
   if (membersWithAttendance.length) {
     message.textContent = `Tidak dapat menghapus jamaah yang memiliki riwayat presensi: ${membersWithAttendance.map((member) => member.nama).join(", ")}.`;
     message.className = "form-message error-message";
@@ -1001,6 +1002,82 @@ function updateMemberGender(index, gender) {
   saveMembers();
   renderJamaah();
   renderDashboard();
+}
+
+function editJamaah(index) {
+  if (window.currentRole !== "admin") {
+    alert("Hanya admin yang dapat mengedit data jamaah.");
+    return;
+  }
+  const member = jamaahData[index];
+  if (!member) return;
+
+  document.getElementById("member-edit-id").value = member.id;
+  document.getElementById("member-edit-name").value = member.nama;
+  document.getElementById("member-edit-group").value = member.kelompok;
+  document.getElementById("member-edit-gender").value =
+    ["Pria", "Wanita"].includes(member.jenisKelamin) ? member.jenisKelamin : "";
+  document.getElementById("member-edit-role").value = member.peran;
+  document.getElementById("member-edit-message").textContent = "";
+  document.getElementById("member-edit-message").className = "form-message";
+  const form = document.getElementById("member-edit-form");
+  form.classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.getElementById("member-edit-name").focus();
+}
+
+function cancelJamaahEdit() {
+  const form = document.getElementById("member-edit-form");
+  form.reset();
+  form.classList.add("hidden");
+  const message = document.getElementById("member-edit-message");
+  message.textContent = "";
+  message.className = "form-message";
+}
+
+function saveJamaahEdit() {
+  const message = document.getElementById("member-edit-message");
+  if (window.currentRole !== "admin") {
+    message.textContent = "Hanya admin yang dapat mengedit data jamaah.";
+    message.className = "form-message error-message";
+    return;
+  }
+  const memberId = document.getElementById("member-edit-id").value;
+  const member = jamaahData.find((item) => item.id === memberId);
+  if (!member) {
+    message.textContent = "Data jamaah tidak ditemukan. Muat ulang daftar lalu coba lagi.";
+    message.className = "form-message error-message";
+    return;
+  }
+
+  const updatedMember = {
+    ...member,
+    nama: document.getElementById("member-edit-name").value.trim().replace(/\s+/g, " "),
+    kelompok: document.getElementById("member-edit-group").value,
+    jenisKelamin: document.getElementById("member-edit-gender").value,
+    peran: document.getElementById("member-edit-role").value
+  };
+  if (!updatedMember.nama || !GROUPS.includes(updatedMember.kelompok)
+      || !["Pria", "Wanita"].includes(updatedMember.jenisKelamin)
+      || !["Jamaah", "Pengurus"].includes(updatedMember.peran)) {
+    message.textContent = "Lengkapi nama, kelompok, jenis kelamin, dan peran dengan data yang valid.";
+    message.className = "form-message error-message";
+    return;
+  }
+  if (isDuplicateMember(updatedMember, jamaahData.filter((item) => item.id !== member.id))) {
+    message.textContent = "Nama tersebut sudah terdaftar pada kelompok yang dipilih.";
+    message.className = "form-message error-message";
+    return;
+  }
+
+  Object.assign(member, updatedMember);
+  saveMembers();
+  cancelJamaahEdit();
+  renderJamaah();
+  renderDashboard();
+  const result = document.getElementById("jamaah-action-message");
+  result.textContent = "Data jamaah berhasil diperbarui.";
+  result.className = "form-message success-message";
 }
 
 function parseCsv(text) {
