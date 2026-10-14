@@ -39,7 +39,6 @@ let sharedSyncPending = 0;
 let sharedSyncBusy = false;
 let sharedDataRevision = 0;
 let sharedSyncTimer = null;
-let dashboardDetailNames = { zero: [], full: [] };
 window.currentRole = null;
 if (JSON.stringify(jamaahData) !== JSON.stringify(savedMembers)) {
   saveMembers();
@@ -666,22 +665,6 @@ function selectDashboardGroup(group) {
   renderDashboard();
 }
 
-function toggleDashboardDetails(type, groupIndex) {
-  const row = document.getElementById(`dash-${type}-detail-${groupIndex}`);
-  const button = document.getElementById(`dash-${type}-button-${groupIndex}`);
-  if (!row || !button) return;
-  const isExpanded = row.classList.toggle("hidden") === false;
-  if (isExpanded && row.dataset.loaded !== "true") {
-    const names = dashboardDetailNames[type][groupIndex] || [];
-    row.querySelector("td").innerHTML = names.length
-      ? `<ul class="dashboard-member-list">${names.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}</ul>`
-      : '<p class="section-help">Tidak ada jamaah pada tingkat ini.</p>';
-    row.dataset.loaded = "true";
-  }
-  button.setAttribute("aria-expanded", String(isExpanded));
-  button.textContent = isExpanded ? "Tutup" : "Rincian";
-}
-
 function dashboardGroupColor(group) {
   const colors = ["#047857", "#2563eb", "#9333ea", "#ea580c", "#0891b2", "#db2777"];
   return colors[GROUPS.indexOf(group) % colors.length] || colors[0];
@@ -770,6 +753,12 @@ function renderDashboard() {
     member.peran.toLowerCase() === "jamaah"
       && (!selectedGroup || member.kelompok === selectedGroup));
   const genderAttendance = { Pria: 0, Wanita: 0 };
+  const genderMemberTotals = { Pria: 0, Wanita: 0 };
+  eligibleMembers.forEach((member) => {
+    if (genderMemberTotals[member.jenisKelamin] !== undefined) {
+      genderMemberTotals[member.jenisKelamin] += 1;
+    }
+  });
   allMonthRecords.forEach((record) => {
     if (record.status !== "Hadir") return;
     const member = memberLookup.find(record);
@@ -789,43 +778,41 @@ function renderDashboard() {
     if (rate === 0) counts.zero.push(member.nama);
     if (rate === 1) counts.full.push(member.nama);
   });
+  const formatMonth = (month) => {
+    const [year, monthNumber] = month.split("-").map(Number);
+    return new Date(year, monthNumber - 1, 1).toLocaleDateString("id-ID", {
+      month: "long",
+      year: "numeric"
+    });
+  };
   const periodLabel = selectedMonth
-    ? `Bulan ${selectedMonth}`
+    ? formatMonth(selectedMonth)
     : mode === "period" && (startMonth || endMonth)
-      ? `Periode ${startMonth || "tanpa batas awal"} s.d. ${endMonth || "tanpa batas akhir"}`
+      ? startMonth && endMonth
+        ? `${formatMonth(startMonth)} – ${formatMonth(endMonth)}`
+        : startMonth
+          ? `Sejak ${formatMonth(startMonth)}`
+          : `Sampai ${formatMonth(endMonth)}`
       : "Seluruh bulan";
-  dashboardDetailNames = { zero: [], full: [] };
-  const rowsByAttendance = (attendanceType) => groups.map(({ group }, index) => {
-    const names = (groupAttendanceCounts.get(group)?.[attendanceType] || [])
-      .sort((first, second) => first.localeCompare(second, "id"));
-    dashboardDetailNames[attendanceType][index] = names;
-    return `<tr>
-      <td>${escapeHtml(group)}</td>
-      <td>${names.length}</td>
-      <td><button id="dash-${attendanceType}-button-${index}" class="dashboard-detail-button" type="button"
-        aria-expanded="false" onclick="toggleDashboardDetails('${attendanceType}',${index})"
-        ${names.length ? "" : "disabled"}>Rincian</button></td>
-    </tr>
-    <tr id="dash-${attendanceType}-detail-${index}" class="dashboard-detail-row hidden">
-      <td colspan="3"></td>
-    </tr>`;
-  }).join("");
 
   const attendanceRate = totalCapacity ? totalAttendance / totalCapacity * 100 : 0;
   const percentPria = totalAttendance ? genderAttendance.Pria / totalAttendance * 100 : 0;
   const percentWanita = totalAttendance ? genderAttendance.Wanita / totalAttendance * 100 : 0;
-  const averageAttendance = totalMeetings ? totalAttendance / totalMeetings : 0;
+  const zeroAttendanceCount = [...groupAttendanceCounts.values()]
+    .reduce((total, counts) => total + counts.zero.length, 0);
+  const fullAttendanceCount = [...groupAttendanceCounts.values()]
+    .reduce((total, counts) => total + counts.full.length, 0);
   const formatPercentage = (value) => `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
-  const formatAverage = (value) => value.toLocaleString("id-ID", { maximumFractionDigits: 1 });
+  const groupScopeLabel = selectedGroup ? "Kelompok Terpilih" : "Seluruh Kelompok";
 
   document.getElementById("dashboard-cards").innerHTML = [
     { title: "Jumlah Jamaah", value: eligibleMembers.length, meta: selectedGroup ? "Jamaah di kelompok terpilih" : "Seluruh jamaah terdaftar", type: "count" },
     { title: "Total Pertemuan", value: totalMeetings, meta: periodLabel, type: "count" },
-    { title: "Total Kehadiran", value: totalAttendance, meta: "Jumlah seluruh presensi berstatus Hadir", type: "count" },
-    { title: "Persentase Tingkat Kehadiran", value: formatPercentage(attendanceRate), meta: `${totalAttendance} dari ${totalCapacity} kapasitas`, type: "percent" },
-    { title: "Persentase Kehadiran Pria", value: formatPercentage(percentPria), meta: `${genderAttendance.Pria} dari ${totalAttendance} kehadiran`, type: "percent" },
-    { title: "Persentase Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderAttendance.Wanita} dari ${totalAttendance} kehadiran`, type: "percent" },
-    { title: "Rata-Rata Jamaah Hadir per Pengajian", value: formatAverage(averageAttendance), meta: `${totalAttendance} kehadiran ÷ ${totalMeetings} pengajian`, type: "count" }
+    { title: "Tingkat Kehadiran", value: formatPercentage(attendanceRate), meta: groupScopeLabel, type: "percent" },
+    { title: "Kehadiran Pria", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} jamaah pria · ${groupScopeLabel}`, type: "percent" },
+    { title: "Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} jamaah wanita · ${groupScopeLabel}`, type: "percent" },
+    { title: "Tingkat Kehadiran 0%", value: zeroAttendanceCount, meta: groupScopeLabel, type: "count" },
+    { title: "Tingkat Kehadiran 100%", value: fullAttendanceCount, meta: groupScopeLabel, type: "count" }
   ].map(({ title, value, meta, type }) => `
     <article class="card dashboard-kpi-card ${type === "percent" ? "dashboard-kpi-percent" : ""}">
       <h3>${escapeHtml(title)}</h3>
@@ -849,10 +836,6 @@ function renderDashboard() {
   document.getElementById("status-chart-note").textContent =
     `${totalMeetings} pengajian pada ${periodLabel.toLocaleLowerCase("id-ID")} · komposisi status presensi terfilter.`;
   renderStatusDonut(allMonthRecords, totalMeetings, true);
-  document.getElementById("dash-zero-period").textContent = periodLabel;
-  document.getElementById("dash-full-period").textContent = periodLabel;
-  document.getElementById("dash-zero-table").innerHTML = rowsByAttendance("zero");
-  document.getElementById("dash-full-table").innerHTML = rowsByAttendance("full");
 }
 
 function renderRiwayat() {
