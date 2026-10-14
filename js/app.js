@@ -941,21 +941,24 @@ function manualBatchTextChanged() {
 function resolveBatchPresensi(group, gender) {
   const incoming = [];
   const errors = [];
+  const skipped = [];
   const previews = [];
+  const fileImport = Boolean(attendanceBatchFileData);
   const groupDescription = group === "all" ? "semua kelompok" : `kelompok ${group}`;
+  const reportIssue = (issue) => (fileImport ? skipped : errors).push(issue);
   const addEntry = (query, statusValue, date, location) => {
     const status = normalizeStatus(statusValue);
     if (!query || !status) {
-      errors.push(`${location}: nama dan status H/I/S/A wajib diisi dengan benar.`);
+      reportIssue(`${location}: nama atau status H/I/S/A tidak valid.`);
       return;
     }
     const matches = findBatchMemberMatches(query, group, gender);
     if (!matches.length) {
-      errors.push(`${location}: nama "${query}" tidak ditemukan pada ${groupDescription}, ${gender}.`);
+      reportIssue(`${location}: nama "${query}" tidak ditemukan pada ${groupDescription}, ${gender}.`);
       return;
     }
     if (matches.length > 1) {
-      errors.push(`${location}: "${query}" cocok dengan beberapa jamaah: ${matches.map((member) => `${member.nama} (${member.kelompok})`).join(", ")}. Ketik nama lebih lengkap.`);
+      reportIssue(`${location}: "${query}" cocok dengan beberapa jamaah: ${matches.map((member) => `${member.nama} (${member.kelompok})`).join(", ")}.`);
       return;
     }
     const [member] = matches;
@@ -968,7 +971,7 @@ function resolveBatchPresensi(group, gender) {
       metode: "Massal"
     };
     if (hasAttendance(record, incoming)) {
-      errors.push(`${location}: presensi ${member.nama} tanggal ${date} sudah ada.`);
+      reportIssue(`${location}: presensi ${member.nama} tanggal ${date} sudah ada.`);
       return;
     }
     incoming.push(record);
@@ -978,7 +981,7 @@ function resolveBatchPresensi(group, gender) {
   if (attendanceBatchFileData) {
     attendanceBatchFileData.entries.forEach((entry) => {
       if (entry.extraValues) {
-        errors.push(`Baris ${entry.line}: terdapat data di luar kolom tanggal.`);
+        reportIssue(`Baris ${entry.line}: terdapat data di luar kolom tanggal.`);
       }
       entry.statuses.forEach((status, dateIndex) => {
         if (!status) return;
@@ -988,7 +991,7 @@ function resolveBatchPresensi(group, gender) {
     });
   } else {
     const text = document.getElementById("attendance-batch").value.trim();
-    if (!text) return { incoming, errors, previews };
+    if (!text) return { incoming, errors, skipped, previews };
     const date = document.getElementById("batch-date").value;
     if (!date) errors.push("Pilih tanggal presensi untuk input ketik.");
     try {
@@ -999,7 +1002,7 @@ function resolveBatchPresensi(group, gender) {
       errors.push(error.message);
     }
   }
-  return { incoming, errors, previews };
+  return { incoming, errors, skipped, previews };
 }
 
 function previewBatchMatches() {
@@ -1017,10 +1020,12 @@ function previewBatchMatches() {
     preview.className = "form-message batch-match-preview";
     return;
   }
-  const { incoming, errors, previews } = resolveBatchPresensi(group, gender);
-  preview.textContent = [...previews, ...errors].join("\n");
-  preview.className = `form-message batch-match-preview ${errors.length ? "error-message" : "success-message"}`;
-  if (!incoming.length && !errors.length) {
+  const { incoming, errors, skipped, previews } = resolveBatchPresensi(group, gender);
+  const ignored = skipped.map((issue) => `Dilewati — ${issue}`);
+  preview.textContent = [...previews, ...errors, ...ignored].join("\n");
+  preview.className = `form-message batch-match-preview ${errors.length ? "error-message"
+    : skipped.length ? "warning-message" : "success-message"}`;
+  if (!incoming.length && !errors.length && !skipped.length) {
     preview.textContent = attendanceBatchFileData
       ? "Tidak ada status presensi yang dapat disimpan."
       : "Masukkan nama dan status untuk melihat pencocokan.";
@@ -1342,9 +1347,15 @@ function addBatchPresensi() {
     if ((group !== "all" && !GROUPS.includes(group)) || !["Pria", "Wanita"].includes(gender)) {
       throw new Error("Pilih kelompok atau Semua Kelompok, serta jenis kelamin, untuk presensi massal.");
     }
-    const { incoming, errors } = resolveBatchPresensi(group, gender);
+    const { incoming, errors, skipped } = resolveBatchPresensi(group, gender);
     if (errors.length) throw new Error(errors.join("\n"));
-    if (!incoming.length) throw new Error("Tidak ada presensi baru untuk disimpan.");
+    if (!incoming.length) {
+      message.textContent = skipped.length
+        ? `Tidak ada presensi baru yang disimpan. ${skipped.length} data dilewati:\n${skipped.join("\n")}`
+        : "Tidak ada presensi baru untuk disimpan.";
+      message.className = `form-message ${skipped.length ? "warning-message" : "error-message"}`;
+      return;
+    }
     presensiData.push(...incoming);
     saveAttendance();
     document.getElementById("attendance-batch").value = "";
@@ -1352,8 +1363,10 @@ function addBatchPresensi() {
     attendanceBatchFileData = null;
     document.getElementById("batch-match-preview").textContent = "";
     document.getElementById("batch-file-message").textContent = "";
-    message.textContent = `${incoming.length} presensi berhasil disimpan: ${incoming.map((record) => record.nama).join(", ")}.`;
-    message.className = "form-message success-message";
+    message.textContent = `${incoming.length} presensi berhasil disimpan${skipped.length
+      ? `. ${skipped.length} data dilewati:\n${skipped.join("\n")}`
+      : `: ${incoming.map((record) => record.nama).join(", ")}.`}`;
+    message.className = `form-message ${skipped.length ? "warning-message" : "success-message"}`;
     renderRiwayat();
     renderDashboard();
   } catch (error) {
