@@ -119,3 +119,12 @@ revoke all on function public.bhm_save_app_collection(text, jsonb) from public, 
 grant execute on function public.bhm_authenticate_app_user(text, text) to service_role;
 grant execute on function public.bhm_change_app_password(text, text) to service_role;
 grant execute on function public.bhm_save_app_collection(text, jsonb) to service_role;
+
+notify pgrst, 'reload schema';
+
+select
+  to_regclass('public.bhm_app_state') is not null as state_table_ready,
+  to_regclass('public.bhm_app_accounts') is not null as accounts_table_ready,
+  to_regprocedure('public.bhm_authenticate_app_user(text,text)') is not null as login_function_ready,
+  to_regprocedure('public.bhm_change_app_password(text,text)') is not null as password_function_ready,
+  to_regprocedure('public.bhm_save_app_collection(text,jsonb)') is not null as save_function_ready;

@@ -4,7 +4,10 @@ The app stores data in each browser by default. To share member and attendance
 data between devices, configure the Supabase database and deploy the `/api`
 serverless function alongside the static app.
 
-1. In the Supabase SQL Editor, run [`schema.sql`](./schema.sql).
+1. In the Supabase SQL Editor for the project matching `SUPABASE_URL`, run the
+   entire [`schema.sql`](./schema.sql) script. The final result row must show
+   `true` for all five `*_ready` columns. If not, check the SQL Editor output
+   for the first error and fix it before retrying the login.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
    (Production, and Preview/Development if you use them), then redeploy:
@@ -35,9 +38,11 @@ the failed deployment's **Functions** logs in Vercel and inspect the `/api`
 function. The log includes the Supabase HTTP status and Postgres/PostgREST error
 code, but never logs the API key or login password.
 
-- `PGRST202` or `42883`: the authentication RPC is missing or not in the schema
-  cache. Run `schema.sql` in the correct Supabase project's SQL Editor, then
-  retry after a short delay.
+- `PGRST202` or `42883`: the RPC named in the Vercel Function log is missing or
+  not in the PostgREST schema cache. Run the entire `schema.sql` in the correct
+  project's SQL Editor. The script requests a schema-cache reload and shows a
+  verification row; retry the login after confirming all five values are
+  `true`.
 - `PGRST205` or `42P01`: the shared-state table is missing. Run `schema.sql`
   against that project.
 - `401`, `403`, or `42501`: verify the Vercel variable names and values, especially
