@@ -44,11 +44,19 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
 .history-actions{display:flex;align-items:center;gap:12px;margin:0 0 12px}
 .history-actions .form-message{margin:0}
 .attendance-row-select,#riwayat-select-all{width:20px;height:20px;accent-color:var(--brand);cursor:pointer}
+.member-row-select,#jamaah-select-all{width:20px;height:20px;accent-color:var(--brand);cursor:pointer}
 .history-actions .table-action{min-height:42px;padding:8px 14px}
+.member-list-filters .form-message{margin:0}
 @media(max-width:600px){
   #tab-input .form-row{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
   #tab-input .form-row label{width:100%;min-width:0;white-space:nowrap}
   #tab-input .form-row input,#tab-input .form-row select{width:100%;min-width:0}
   .history-actions{align-items:stretch;flex-direction:column}
   .history-actions .table-action{width:100%}
+  .member-list-filters{align-items:stretch}
+  .member-list-filters label{width:100%;flex-direction:column;align-items:stretch}
+  .member-list-filters select{width:100%;min-height:44px}
+  .member-list-filters .table-action{width:100%;min-height:44px}
+  .barcode-manager-controls label{margin-top:4px}
+  .barcode-manager-controls select,.barcode-manager-controls .btn-secondary{width:100%;min-width:0;min-height:44px}
 }

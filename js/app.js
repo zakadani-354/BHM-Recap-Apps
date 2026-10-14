@@ -440,11 +440,17 @@ function deleteSelectedAttendance() {
 
 function renderJamaah() {
   const isAdmin = window.currentRole === "admin";
+  const group = document.getElementById("jamaah-filter-group").value;
+  const role = document.getElementById("jamaah-filter-role").value;
   document.getElementById("jamaah-table").innerHTML = [...jamaahData]
     .map((member, index) => ({ member, index }))
+    .filter(({ member }) => (!group || member.kelompok === group)
+      && (!role || member.peran === role))
     .sort((a, b) => a.member.kelompok.localeCompare(b.member.kelompok)
       || a.member.nama.localeCompare(b.member.nama))
     .map(({ member, index }) => `<tr>
+      ${isAdmin ? `<td><input class="member-row-select" type="checkbox" value="${index}"
+        aria-label="Pilih ${escapeHtml(member.nama)}" onchange="updateMemberSelection()"></td>` : ""}
       <td>${escapeHtml(member.nama)}</td>
       <td>${escapeHtml(member.kelompok)}</td>
       <td>${member.jenisKelamin === "Tidak diatur" && isAdmin
@@ -458,11 +464,63 @@ function renderJamaah() {
         <button class="table-action" type="button" onclick="selectMemberBarcode(${index})">Barcode</button>
         ${isAdmin ? `<button class="table-action" type="button" onclick="removeJamaah(${index})" aria-label="Hapus ${escapeHtml(member.nama)}">Hapus</button>` : ""}
       </td>
-    </tr>`).join("") || '<tr><td colspan="5">Belum ada data jamaah.</td></tr>';
-  const header = document.querySelector("#page-jamaah thead tr");
-  if (header) header.innerHTML = "<th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Peran</th><th>Barcode / Aksi</th>";
+    </tr>`).join("") || `<tr><td colspan="${isAdmin ? 6 : 5}">Tidak ada data jamaah yang sesuai filter.</td></tr>`;
+  document.getElementById("jamaah-select-all-header").classList.toggle("hidden", !isAdmin);
+  document.getElementById("jamaah-select-all").checked = false;
+  document.getElementById("jamaah-select-all").indeterminate = false;
+  document.getElementById("delete-selected-members").classList.toggle("hidden", !isAdmin);
+  updateMemberSelection();
   renderBarcodeMemberOptions();
   updateAttendanceMemberOptions();
+}
+
+function updateMemberSelection() {
+  const checkboxes = [...document.querySelectorAll("#jamaah-table .member-row-select")];
+  const selectedCount = checkboxes.filter((checkbox) => checkbox.checked).length;
+  const selectAll = document.getElementById("jamaah-select-all");
+  selectAll.checked = checkboxes.length > 0 && selectedCount === checkboxes.length;
+  selectAll.indeterminate = selectedCount > 0 && selectedCount < checkboxes.length;
+  const deleteButton = document.getElementById("delete-selected-members");
+  deleteButton.disabled = selectedCount === 0;
+  deleteButton.textContent = `Hapus dipilih (${selectedCount})`;
+}
+
+function toggleAllMemberSelection(checked) {
+  document.querySelectorAll("#jamaah-table .member-row-select")
+    .forEach((checkbox) => { checkbox.checked = checked; });
+  updateMemberSelection();
+}
+
+function deleteSelectedMembers() {
+  if (window.currentRole !== "admin") {
+    alert("Hanya admin yang dapat menghapus data jamaah.");
+    return;
+  }
+  const selectedIndices = new Set(
+    [...document.querySelectorAll("#jamaah-table .member-row-select:checked")]
+      .map((checkbox) => Number(checkbox.value))
+  );
+  if (!selectedIndices.size) return;
+
+  const selectedMembers = [...selectedIndices].map((index) => jamaahData[index]).filter(Boolean);
+  const membersWithAttendance = selectedMembers.filter((member) => presensiData.some((record) =>
+    (record.memberId && record.memberId === member.id)
+      || (record.nama.toLowerCase() === member.nama.toLowerCase()
+        && record.kelompok === member.kelompok)));
+  const message = document.getElementById("jamaah-delete-message");
+  if (membersWithAttendance.length) {
+    message.textContent = `Tidak dapat menghapus jamaah yang memiliki riwayat presensi: ${membersWithAttendance.map((member) => member.nama).join(", ")}.`;
+    message.className = "form-message error-message";
+    return;
+  }
+  if (!window.confirm(`Hapus ${selectedMembers.length} jamaah yang dipilih?`)) return;
+
+  jamaahData = jamaahData.filter((_, index) => !selectedIndices.has(index));
+  saveMembers();
+  message.textContent = `${selectedMembers.length} jamaah berhasil dihapus.`;
+  message.className = "form-message success-message";
+  renderJamaah();
+  renderDashboard();
 }
 
 function updateAttendanceMemberOptions(selectedId = "") {
@@ -483,11 +541,18 @@ function updateAttendanceMemberOptions(selectedId = "") {
 function renderBarcodeMemberOptions() {
   const select = document.getElementById("barcode-member");
   if (!select) return;
+  const group = document.getElementById("barcode-group").value;
   const selectedId = select.value;
-  select.innerHTML = '<option value="">Pilih jamaah...</option>' + jamaahData
+  const candidates = jamaahData.filter((member) => group && member.kelompok === group);
+  const placeholder = !group ? "Pilih kelompok terlebih dahulu..."
+    : candidates.length ? "Pilih jamaah..." : "Tidak ada jamaah di kelompok ini.";
+  select.innerHTML = `<option value="">${placeholder}</option>`
+    + candidates
     .map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.nama)} — ${escapeHtml(member.kelompok)} (${escapeHtml(member.jenisKelamin)})</option>`)
     .join("");
-  if (jamaahData.some((member) => member.id === selectedId)) select.value = selectedId;
+  select.disabled = !group || candidates.length === 0;
+  if (candidates.some((member) => member.id === selectedId)) select.value = selectedId;
+  else select.value = "";
   renderSelectedBarcode();
 }
 
@@ -531,6 +596,8 @@ function renderSelectedBarcode() {
 function selectMemberBarcode(index) {
   const member = jamaahData[index];
   if (!member) return;
+  document.getElementById("barcode-group").value = member.kelompok;
+  renderBarcodeMemberOptions();
   document.getElementById("barcode-member").value = member.id;
   renderSelectedBarcode();
   document.querySelector(".barcode-manager").scrollIntoView({ behavior: "smooth", block: "center" });

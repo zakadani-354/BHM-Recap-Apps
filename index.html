@@ -239,8 +239,29 @@
       </div>
       <button type="submit" class="btn-primary"><i class="fa-solid fa-user-plus"></i> Tambah</button>
     </form>
+    <div class="filter-row member-list-filters">
+      <label>Filter Kelompok:
+        <select id="jamaah-filter-group" onchange="renderJamaah()">
+          <option value="">Semua Kelompok</option>
+          <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+          <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+        </select>
+      </label>
+      <label>Filter Peran:
+        <select id="jamaah-filter-role" onchange="renderJamaah()">
+          <option value="">Semua Peran</option><option>Jamaah</option><option>Pengurus</option>
+        </select>
+      </label>
+      <button id="delete-selected-members" class="table-action" type="button"
+        onclick="deleteSelectedMembers()" disabled>Hapus dipilih (0)</button>
+      <p id="jamaah-delete-message" class="form-message" role="status"></p>
+    </div>
     <table class="data-table">
-      <thead><tr><th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Peran</th><th>Aksi</th></tr></thead>
+      <thead><tr>
+        <th id="jamaah-select-all-header"><input id="jamaah-select-all" type="checkbox" aria-label="Pilih semua jamaah yang tampil"
+          onchange="toggleAllMemberSelection(this.checked)"></th>
+        <th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Peran</th><th>Barcode / Aksi</th>
+      </tr></thead>
       <tbody id="jamaah-table"></tbody>
     </table>
   </div>
@@ -259,9 +280,15 @@
     <h2 id="barcode-manager-title">Barcode Jamaah</h2>
     <p class="section-help">Pilih jamaah untuk membuat barcode QR berbentuk kotak. Nama jamaah dicetak di bawah barcode, yang dapat diunduh sebagai gambar PNG atau PDF.</p>
     <div class="barcode-manager-controls">
+      <label for="barcode-group">Kelompok</label>
+      <select id="barcode-group" onchange="renderBarcodeMemberOptions()">
+        <option value="">Pilih kelompok...</option>
+        <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+        <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+      </select>
       <label for="barcode-member">Jamaah</label>
-      <select id="barcode-member" onchange="renderSelectedBarcode()">
-        <option value="">Pilih jamaah...</option>
+      <select id="barcode-member" onchange="renderSelectedBarcode()" disabled>
+        <option value="">Pilih kelompok terlebih dahulu...</option>
       </select>
       <button class="btn-secondary" type="button" onclick="downloadBarcodeImage()">Unduh PNG</button>
       <button class="btn-secondary" type="button" onclick="downloadBarcodePdf()">Unduh PDF</button>
