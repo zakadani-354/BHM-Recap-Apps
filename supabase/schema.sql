@@ -182,7 +182,7 @@ begin
       or coalesce(entry->>'jenisPengajian', 'Pengajian Rutin')
         not in ('Pengajian Rutin', 'Terobosan Pusat')
       or entry->>'metode' is null
-      or entry->>'metode' not in ('Satuan', 'Barcode', 'Massal')
+      or entry->>'metode' not in ('Satuan', 'Barcode')
       or not exists (
         select 1
         from jsonb_array_elements(current_members) as roster(member)

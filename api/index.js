@@ -399,6 +399,9 @@ async function handle(req, res) {
     if (!Array.isArray(body.records) || body.records.length === 0) {
       throw new ApiError(400, "INVALID_DATA", "Tambahkan setidaknya satu catatan presensi.");
     }
+    if (body.records.some((record) => record?.metode === "Massal")) {
+      throw new ApiError(403, "MASS_ATTENDANCE_DISABLED", "Akun tautan hanya dapat menambahkan presensi satuan.");
+    }
     if (Buffer.byteLength(JSON.stringify(body.records), "utf8") > MAX_BODY_BYTES) {
       throw new ApiError(413, "BODY_TOO_LARGE", "Ukuran data melebihi batas 4 MB.");
     }

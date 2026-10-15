@@ -313,7 +313,7 @@ function switchTab(tab) {
 }
 
 function setAttendanceMode(mode) {
-  const isSingle = mode === "satuan";
+  const isSingle = window.currentRole === "presensi" || mode !== "massal";
   const singleSection = document.getElementById("attendance-single");
   const massSection = document.getElementById("attendance-mass");
   singleSection.classList.toggle("hidden", !isSingle);
@@ -325,6 +325,10 @@ function setAttendanceMode(mode) {
     control.disabled = isSingle;
   });
   document.getElementById("attendance-mode-single").classList.toggle("active", isSingle);
+  document.getElementById("attendance-mode-mass").classList.toggle(
+    "hidden",
+    window.currentRole === "presensi"
+  );
   document.getElementById("attendance-mode-mass").classList.toggle("active", !isSingle);
   document.getElementById("p-metode").value = "Satuan";
   updateTerobosanAttendanceCounts();
@@ -2039,6 +2043,11 @@ async function importFileData() {
 }
 
 function addBatchPresensi() {
+  if (window.currentRole === "presensi") {
+    alert("Akun pengisi presensi hanya dapat menggunakan Input Satuan.");
+    setAttendanceMode("satuan");
+    return;
+  }
   const message = document.getElementById("attendance-import-message");
   const group = document.getElementById("batch-group").value;
   const gender = document.getElementById("batch-gender").value;

@@ -40,7 +40,8 @@ sent in the page request or referrer; the app exchanges it by POST with its own
 API. The resulting session receives only the member fields needed to choose
 attendees and aggregate Terobosan counts, and can only add new attendance
 records; it cannot read attendance history, replace/delete attendance, or edit
-member data. Rotate the token in Vercel and redeploy to invalidate the link.
+member data. Input Massal is disabled for this link. Rotate the token in Vercel
+and redeploy to invalidate the link.
 This link requires the hosted API and shared Supabase database; it does not
 work when opening `index.html` directly from disk.
 
