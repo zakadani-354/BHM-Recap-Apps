@@ -330,6 +330,9 @@ function setAttendanceMode(mode) {
     window.currentRole === "presensi"
   );
   document.getElementById("attendance-mode-mass").classList.toggle("active", !isSingle);
+  document.getElementById("p-nama-input").disabled =
+    !isSingle || window.currentRole !== "presensi";
+  updateAttendanceMemberOptions();
   document.getElementById("p-metode").value = "Satuan";
   updateTerobosanAttendanceCounts();
   const session = sessionStorage.getItem(SESSION_KEY);
@@ -383,7 +386,26 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
 
   const isAdmin = role === "admin";
   const isAttendanceOnly = role === "presensi";
+  const attendanceNameInput = document.getElementById("p-nama-input");
+  const attendanceNameSelect = document.getElementById("p-nama");
+  document.getElementById("p-nama-input-field").classList.toggle("hidden", !isAttendanceOnly);
+  document.getElementById("p-nama-select-field").classList.toggle("hidden", isAttendanceOnly);
+  attendanceNameInput.disabled = !isAttendanceOnly;
+  attendanceNameInput.required = isAttendanceOnly;
+  attendanceNameSelect.required = !isAttendanceOnly;
+  attendanceNameInput.value = "";
+  attendanceNameSelect.value = "";
+  updateAttendanceMemberOptions();
+  document.getElementById("presensi-heading").classList.toggle("hidden", isAttendanceOnly);
   document.querySelector("#page-presensi .tabs").classList.toggle("hidden", isAttendanceOnly);
+  document.getElementById("attendance-mode-switch").classList.toggle("hidden", isAttendanceOnly);
+  document.getElementById("attendance-type-row").classList.toggle("hidden", isAttendanceOnly);
+  document.getElementById("terobosan-attendance-counts").classList.toggle("hidden", isAttendanceOnly);
+  document.getElementById("barcode-scan-section").classList.toggle("hidden", isAttendanceOnly);
+  if (isAttendanceOnly) {
+    document.getElementById("p-jenis-pengajian").value = TEROBOSAN_TYPE;
+    attendanceTypeChanged();
+  }
   document.querySelector("#page-jamaah .tabs").classList.toggle("hidden", !isAdmin);
   document.querySelector("#jamaah-satuan form").classList.toggle("hidden", !isAdmin);
   if (!isAdmin) {
@@ -1065,11 +1087,12 @@ function terobosanAttendanceCounts(date) {
       && record.status === "Hadir")
     .forEach((record) => {
       const member = memberForRecord(record);
-      if (!member || !Object.prototype.hasOwnProperty.call(counts, member.jenisKelamin)) return;
-      const identity = member.id || `${normalizeNameForMatch(record.nama)}\u0000${record.kelompok}`;
-      if (attendedMembers.has(identity)) return;
-      attendedMembers.add(identity);
-      counts[member.jenisKelamin] += 1;
+    const gender = member?.jenisKelamin || record.jenisKelamin;
+    if (!Object.prototype.hasOwnProperty.call(counts, gender)) return;
+    const identity = member?.id || `${normalizeNameForMatch(record.nama)}\u0000${record.kelompok}`;
+    if (attendedMembers.has(identity)) return;
+    attendedMembers.add(identity);
+    counts[gender] += 1;
     });
   return counts;
 }
@@ -1102,7 +1125,10 @@ function attendanceTypeChanged() {
   ];
   dateInputs.forEach((input) => { input.readOnly = false; });
   const countsPanel = document.getElementById("terobosan-attendance-counts");
-  countsPanel.classList.toggle("hidden", !isTerobosan);
+  countsPanel.classList.toggle(
+    "hidden",
+    !isTerobosan || window.currentRole === "presensi"
+  );
   if (isTerobosan) {
     const selectedDate = document.getElementById("attendance-single").classList.contains("hidden")
       ? dateInputs[1].value
@@ -1115,8 +1141,28 @@ function attendanceTypeChanged() {
         input.readOnly = true;
       });
     }
+
   }
   updateTerobosanAttendanceCounts();
+}
+
+function attendanceFiltersChanged() {
+  attendanceManualSelectionChanged();
+  updateAttendanceNameOptions();
+}
+
+function updateAttendanceNameOptions() {
+  const group = document.getElementById("p-kelompok").value;
+  const gender = document.getElementById("p-gender").value;
+  const role = document.getElementById("p-peran").value;
+  const options = jamaahData
+    .filter((member) => member.kelompok === group
+      && (!gender || member.jenisKelamin === gender)
+      && (!role || member.peran === role))
+    .sort((first, second) => first.nama.localeCompare(second.nama, "id"))
+    .map((member) => `<option value="${escapeHtml(member.nama)}"></option>`)
+    .join("");
+  document.getElementById("p-nama-options").innerHTML = options;
 }
 
 function attendanceDateChanged(input) {
@@ -1249,6 +1295,7 @@ function renderJamaah() {
   updateMemberSelection();
   renderBarcodeMemberOptions();
   updateAttendanceMemberOptions();
+  updateAttendanceNameOptions();
 }
 
 function updateMemberSelection() {
@@ -1309,7 +1356,9 @@ function updateAttendanceMemberOptions(selectedId = "") {
     && member.jenisKelamin === gender && member.peran === role);
   nameSelect.innerHTML = `<option value="">${candidates.length ? "Pilih nama..." : "Tidak ada jamaah yang cocok"}</option>`
     + candidates.map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.nama)}</option>`).join("");
-  nameSelect.disabled = !group || !gender || !role || !candidates.length;
+  nameSelect.disabled = window.currentRole === "presensi"
+    || document.getElementById("attendance-single").classList.contains("hidden")
+    || !group || !gender || !role || !candidates.length;
   if (selectedId && candidates.some((member) => member.id === selectedId)) {
     nameSelect.value = selectedId;
   }
@@ -1767,18 +1816,39 @@ async function startBarcodeScanner() {
 }
 
 function addPresensi() {
-  const member = jamaahData.find((item) => item.id === document.getElementById("p-nama").value);
+  const group = document.getElementById("p-kelompok").value;
+  const gender = document.getElementById("p-gender").value;
+  const role = document.getElementById("p-peran").value;
+  const selectedMember = jamaahData.find((item) =>
+    item.id === document.getElementById("p-nama").value
+      && item.kelompok === group
+      && item.jenisKelamin === gender
+      && item.peran === role);
+  const name = (window.currentRole === "presensi"
+    ? document.getElementById("p-nama-input").value.trim()
+    : selectedMember?.nama || "").replace(/\s+/g, " ");
+  const member = selectedMember || jamaahData.find((item) =>
+    normalizeNameForMatch(item.nama) === normalizeNameForMatch(name)
+      && item.kelompok === group
+      && item.jenisKelamin === gender
+      && item.peran === role);
   const record = {
     memberId: member?.id,
-    nama: member?.nama || "",
-    kelompok: document.getElementById("p-kelompok").value,
+    nama: member?.nama || name,
+    kelompok: group,
     tanggal: document.getElementById("p-tanggal").value,
-    jenisPengajian: document.getElementById("p-jenis-pengajian").value,
+    jenisKelamin: member?.jenisKelamin || gender,
+    jenisPengajian: window.currentRole === "presensi"
+      ? TEROBOSAN_TYPE
+      : document.getElementById("p-jenis-pengajian").value,
     status: document.getElementById("p-status").value,
-    metode: document.getElementById("p-metode").value
+    metode: window.currentRole === "presensi" ? "Satuan" : document.getElementById("p-metode").value
   };
-  if (!member || !GROUPS.includes(record.kelompok) || !record.tanggal) {
-    alert("Pilih kelompok, jenis kelamin, peran, nama jamaah, dan tanggal.");
+  if (!record.nama || !GROUPS.includes(record.kelompok) || !record.tanggal
+      || !["Pria", "Wanita"].includes(record.jenisKelamin)
+      || !["Jamaah", "Pengurus"].includes(role)
+      || !["Hadir", "Izin", "Sakit", "Alpa"].includes(record.status)) {
+    alert("Isi nama, kelompok, jenis kelamin, peran, tanggal, dan status dengan data yang valid.");
     return;
   }
   if (hasAttendance(record)) {
@@ -1795,9 +1865,11 @@ function addPresensi() {
   saveAttendance([record]);
   if (record.metode === "Barcode") {
     document.querySelector("#tab-input form").reset();
+    document.getElementById("p-nama-input").value = "";
     document.getElementById("scanner-message").textContent = "";
     document.getElementById("scanner-message").className = "form-message";
   } else {
+    document.getElementById("p-nama-input").value = "";
     document.getElementById("p-nama").value = "";
     document.getElementById("p-metode").value = "Satuan";
   }

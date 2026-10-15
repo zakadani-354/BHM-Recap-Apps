@@ -6,7 +6,7 @@ serverless function alongside the static app.
 
 1. In the Supabase SQL Editor for the project matching `SUPABASE_URL`, run the
    entire [`schema.sql`](./schema.sql) script. The final result row must show
-   `true` for all six `*_ready` columns. If not, check the SQL Editor output
+   `true` for all eight `*_ready` columns. If not, check the SQL Editor output
    for the first error and fix it before retrying the login.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
@@ -46,7 +46,10 @@ This link requires the hosted API and shared Supabase database; it does not
 work when opening `index.html` directly from disk.
 
 `Terobosan Pusat` is limited to one event date per calendar year across all
-groups. Its attendance form and dashboard show present men and women separately.
+groups and is stored in the dedicated `bhm_terobosan_events` table. Its
+attendance form and dashboard show present men and women separately. A name
+typed into the attendance form is saved with that attendance record only; it
+does not create a Jamaah database entry.
 
 If the API or Supabase is not configured, the app will clearly report that
 shared sync is unavailable instead of suggesting that local-only data is shared.
@@ -61,7 +64,7 @@ code, but never logs the API key or login password.
 - `PGRST202` or `42883`: the RPC named in the Vercel Function log is missing or
   not in the PostgREST schema cache. Run the entire `schema.sql` in the correct
   project's SQL Editor. The script requests a schema-cache reload and shows a
-  verification row; retry the login after confirming all six values are
+  verification row; retry the login after confirming all eight values are
   `true`.
 - `PGRST205` or `42P01`: the shared-state table is missing. Run `schema.sql`
   against that project.

@@ -119,7 +119,7 @@
 
 <!-- PRESENSI -->
 <section id="page-presensi" class="page hidden">
-  <h1>Presensi</h1>
+  <h1 id="presensi-heading">Presensi</h1>
   <div class="tabs">
     <button class="tab active" onclick="switchTab('input')">Form Input</button>
     <button class="tab" onclick="switchTab('riwayat')">Riwayat Input</button>
@@ -127,7 +127,7 @@
 
   <div id="tab-input">
     <h2>Form Input Presensi</h2>
-    <div class="attendance-mode-switch" role="group" aria-label="Metode formulir presensi">
+    <div id="attendance-mode-switch" class="attendance-mode-switch" role="group" aria-label="Metode formulir presensi">
       <button id="attendance-mode-single" class="btn-secondary active" type="button"
         onclick="setAttendanceMode('satuan')">Input Satuan</button>
       <button id="attendance-mode-mass" class="btn-secondary" type="button"
@@ -135,7 +135,7 @@
     </div>
     <form onsubmit="event.preventDefault(); addPresensi();" class="form-box">
       <input type="hidden" id="p-metode" value="Satuan">
-      <div class="form-row">
+      <div id="attendance-type-row" class="form-row">
         <label>Jenis Pengajian
           <select id="p-jenis-pengajian" onchange="attendanceTypeChanged()">
             <option>Pengajian Rutin</option>
@@ -148,25 +148,31 @@
       <div id="attendance-single">
         <div class="form-row">
           <label>Kelompok
-            <select id="p-kelompok" required onchange="attendanceManualSelectionChanged()">
+            <select id="p-kelompok" required onchange="attendanceFiltersChanged()">
               <option value="">Pilih...</option>
               <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
               <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
             </select>
           </label>
           <label>Jenis Kelamin
-            <select id="p-gender" required onchange="attendanceManualSelectionChanged()">
+            <select id="p-gender" required onchange="attendanceFiltersChanged()">
               <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
               <option value="Tidak diatur">Tidak diatur (data lama)</option>
             </select>
           </label>
           <label>Peran
-            <select id="p-peran" required onchange="attendanceManualSelectionChanged()">
+            <select id="p-peran" required onchange="attendanceFiltersChanged()">
               <option value="">Pilih...</option><option>Jamaah</option><option>Pengurus</option>
             </select>
           </label>
-          <label>Nama
-            <select id="p-nama" required disabled onchange="document.getElementById('p-metode').value='Satuan'">
+          <label id="p-nama-input-field" class="hidden">Nama
+            <input id="p-nama-input" type="text" list="p-nama-options"
+              placeholder="Pilih atau ketik nama baru..." autocomplete="off" required
+              disabled onchange="document.getElementById('p-metode').value='Satuan'">
+            <datalist id="p-nama-options"></datalist>
+          </label>
+          <label id="p-nama-select-field">Nama
+            <select id="p-nama" required onchange="document.getElementById('p-metode').value='Satuan'">
               <option value="">Pilih kelompok, jenis kelamin, dan peran...</option>
             </select>
           </label>
@@ -180,7 +186,7 @@
             </select>
           </label>
         </div>
-        <section class="scanner-box" aria-labelledby="barcode-scan-title">
+        <section id="barcode-scan-section" class="scanner-box" aria-labelledby="barcode-scan-title">
           <h3 id="barcode-scan-title">Input Satuan dengan Barcode</h3>
           <p class="section-help">Scan barcode jamaah untuk mengisi nama otomatis, atau pilih nama melalui dropdown. Status tetap dipilih secara manual.</p>
           <div class="scanner-controls">

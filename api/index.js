@@ -254,6 +254,15 @@ async function loadSharedState(config) {
   };
 }
 
+async function loadTerobosanEvents(config) {
+  const rows = await supabaseRequest(
+    config,
+    "bhm_terobosan_events?select=event_year,event_date,attendance&order=event_year.asc"
+  );
+  if (!Array.isArray(rows)) throw new ApiError(502, "DATABASE_RESPONSE_INVALID", "Data Terobosan Pusat tidak valid.");
+  return rows;
+}
+
 async function saveCollection(config, collection, data) {
   const revision = await supabaseRequest(config, "rpc/bhm_save_app_collection", {
     method: "POST",
@@ -273,7 +282,19 @@ async function handle(req, res) {
 
   if (req.method === "GET") {
     if (!session) throw new ApiError(401, "AUTH_REQUIRED", "Silakan masuk kembali.");
-    const state = await loadSharedState(config);
+    const [state, terobosanEvents] = await Promise.all([
+      loadSharedState(config),
+      loadTerobosanEvents(config)
+    ]);
+    const terobosanRecords = terobosanEvents.flatMap((event) =>
+      Array.isArray(event.attendance)
+        ? event.attendance.map((record) => ({
+          ...record,
+          tanggal: record.tanggal || event.event_date,
+          jenisPengajian: "Terobosan Pusat"
+        }))
+        : []);
+    const allAttendance = [...state.attendance, ...terobosanRecords];
     if (session.role === "presensi") {
       const members = state.members.map((member) => ({
         id: member.id,
@@ -284,8 +305,7 @@ async function handle(req, res) {
       }));
       const membersById = new Map(members.map((member) => [member.id, member]));
       const summaries = new Map();
-      state.attendance
-        .filter((record) => record.jenisPengajian === "Terobosan Pusat")
+      terobosanRecords
         .forEach((record) => {
           if (!summaries.has(record.tanggal)) {
             summaries.set(record.tanggal, { date: record.tanggal, counts: { Pria: 0, Wanita: 0 }, members: new Set() });
@@ -294,12 +314,13 @@ async function handle(req, res) {
           const member = membersById.get(record.memberId)
             || members.find((candidate) => candidate.nama === record.nama
               && candidate.kelompok === record.kelompok);
-          if (!member || !["Pria", "Wanita"].includes(member.jenisKelamin)) return;
+          const gender = member?.jenisKelamin || record.jenisKelamin;
+          if (!["Pria", "Wanita"].includes(gender)) return;
           const summary = summaries.get(record.tanggal);
-          const identity = member.id || `${member.nama}\u0000${member.kelompok}`;
+          const identity = member?.id || `${record.nama}\u0000${record.kelompok}`;
           if (summary.members.has(identity)) return;
           summary.members.add(identity);
-          summary.counts[member.jenisKelamin] += 1;
+          summary.counts[gender] += 1;
         });
       json(res, 200, {
         initialized: state.initialized,
@@ -311,7 +332,11 @@ async function handle(req, res) {
       });
       return;
     }
-    json(res, 200, { ...state, user: { username: session.username, role: session.role } });
+    json(res, 200, {
+      ...state,
+      attendance: allAttendance,
+      user: { username: session.username, role: session.role }
+    });
     return;
   }
 
@@ -399,13 +424,14 @@ async function handle(req, res) {
     if (!Array.isArray(body.records) || body.records.length === 0) {
       throw new ApiError(400, "INVALID_DATA", "Tambahkan setidaknya satu catatan presensi.");
     }
-    if (body.records.some((record) => record?.metode === "Massal")) {
-      throw new ApiError(403, "MASS_ATTENDANCE_DISABLED", "Akun tautan hanya dapat menambahkan presensi satuan.");
+    if (body.records.some((record) => record?.metode !== "Satuan"
+        || record?.jenisPengajian !== "Terobosan Pusat")) {
+      throw new ApiError(403, "ATTENDANCE_TYPE_NOT_ALLOWED", "Akun tautan hanya dapat menambahkan presensi satuan Terobosan Pusat.");
     }
     if (Buffer.byteLength(JSON.stringify(body.records), "utf8") > MAX_BODY_BYTES) {
       throw new ApiError(413, "BODY_TOO_LARGE", "Ukuran data melebihi batas 4 MB.");
     }
-    const revision = await supabaseRequest(config, "rpc/bhm_append_app_attendance", {
+    const revision = await supabaseRequest(config, "rpc/bhm_append_terobosan_attendance", {
       method: "POST",
       body: JSON.stringify({ p_data: body.records })
     });
