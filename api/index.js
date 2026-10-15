@@ -55,7 +55,8 @@ function getConfig() {
   return {
     url: parsedUrl.origin,
     serviceKey,
-    sessionSecret: process.env.BHM_SESSION_SECRET || serviceKey
+    sessionSecret: process.env.BHM_SESSION_SECRET || serviceKey,
+    attendanceLinkToken: process.env.BHM_ATTENDANCE_LINK_TOKEN || ""
   };
 }
 
@@ -144,8 +145,10 @@ function verifySession(token, secret) {
   if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) return null;
   try {
     const payload = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    if (!["admin", "pengurus"].includes(payload.role)
-        || !["admin", "pengurus"].includes(payload.username)
+    const validIdentity = (payload.username === "presensi" && payload.role === "presensi")
+      || (["admin", "pengurus"].includes(payload.username)
+        && ["admin", "pengurus"].includes(payload.role));
+    if (!validIdentity
         || !Number.isInteger(payload.exp)
         || payload.exp <= Math.floor(Date.now() / 1000)) return null;
     return payload;
@@ -219,6 +222,24 @@ async function authenticate(config, username, password) {
   return ["admin", "pengurus"].includes(role) ? role : null;
 }
 
+function secretsMatch(supplied, expected) {
+  if (!supplied || !expected) return false;
+  const suppliedDigest = crypto.createHash("sha256").update(supplied).digest();
+  const expectedDigest = crypto.createHash("sha256").update(expected).digest();
+  return crypto.timingSafeEqual(suppliedDigest, expectedDigest);
+}
+
+function createSessionResponse(req, res, username, role, config) {
+  const token = signSession({
+    username,
+    role,
+    exp: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS
+  }, config.sessionSecret);
+  json(res, 200, { username, role }, {
+    "Set-Cookie": sessionCookie(req, token, SESSION_DURATION_SECONDS)
+  });
+}
+
 async function loadSharedState(config) {
   const rows = await supabaseRequest(
     config,
@@ -253,11 +274,63 @@ async function handle(req, res) {
   if (req.method === "GET") {
     if (!session) throw new ApiError(401, "AUTH_REQUIRED", "Silakan masuk kembali.");
     const state = await loadSharedState(config);
+    if (session.role === "presensi") {
+      const members = state.members.map((member) => ({
+        id: member.id,
+        nama: member.nama,
+        kelompok: member.kelompok,
+        jenisKelamin: member.jenisKelamin,
+        peran: member.peran
+      }));
+      const membersById = new Map(members.map((member) => [member.id, member]));
+      const summaries = new Map();
+      state.attendance
+        .filter((record) => record.jenisPengajian === "Terobosan Pusat")
+        .forEach((record) => {
+          if (!summaries.has(record.tanggal)) {
+            summaries.set(record.tanggal, { date: record.tanggal, counts: { Pria: 0, Wanita: 0 }, members: new Set() });
+          }
+          if (record.status !== "Hadir") return;
+          const member = membersById.get(record.memberId)
+            || members.find((candidate) => candidate.nama === record.nama
+              && candidate.kelompok === record.kelompok);
+          if (!member || !["Pria", "Wanita"].includes(member.jenisKelamin)) return;
+          const summary = summaries.get(record.tanggal);
+          const identity = member.id || `${member.nama}\u0000${member.kelompok}`;
+          if (summary.members.has(identity)) return;
+          summary.members.add(identity);
+          summary.counts[member.jenisKelamin] += 1;
+        });
+      json(res, 200, {
+        initialized: state.initialized,
+        members,
+        attendance: [],
+        terobosanSummary: [...summaries.values()].map(({ date, counts }) => ({ date, counts })),
+        revision: state.revision,
+        user: { username: session.username, role: session.role }
+      });
+      return;
+    }
     json(res, 200, { ...state, user: { username: session.username, role: session.role } });
     return;
   }
 
   const body = await readBody(req);
+  if (body.action === "attendance-link-login") {
+    if (config.attendanceLinkToken.length < 32) {
+      throw new ApiError(
+        503,
+        "ATTENDANCE_LINK_NOT_CONFIGURED",
+        "Tautan presensi belum diaktifkan. Admin perlu mengatur BHM_ATTENDANCE_LINK_TOKEN."
+      );
+    }
+    const token = typeof body.token === "string" ? body.token : "";
+    if (!secretsMatch(token, config.attendanceLinkToken)) {
+      throw new ApiError(401, "INVALID_ATTENDANCE_LINK", "Tautan presensi tidak valid.");
+    }
+    createSessionResponse(req, res, "presensi", "presensi", config);
+    return;
+  }
   if (body.action === "login") {
     const username = String(body.username || "").trim().toLowerCase();
     const password = String(body.password || "");
@@ -266,14 +339,7 @@ async function handle(req, res) {
     }
     const role = await authenticate(config, username, password);
     if (!role) throw new ApiError(401, "INVALID_CREDENTIALS", "Username atau password salah.");
-    const token = signSession({
-      username,
-      role,
-      exp: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS
-    }, config.sessionSecret);
-    json(res, 200, { username, role }, {
-      "Set-Cookie": sessionCookie(req, token, SESSION_DURATION_SECONDS)
-    });
+    createSessionResponse(req, res, username, role, config);
     return;
   }
 
@@ -305,6 +371,9 @@ async function handle(req, res) {
   }
 
   if (body.action === "save") {
+    if (session.role === "presensi") {
+      throw new ApiError(403, "ATTENDANCE_APPEND_ONLY", "Akun pengisi hanya dapat menambahkan presensi baru.");
+    }
     const collection = body.collection;
     if (collection !== "members" && collection !== "attendance") {
       throw new ApiError(400, "INVALID_COLLECTION", "Jenis data yang disimpan tidak valid.");
@@ -320,6 +389,24 @@ async function handle(req, res) {
     }
     const revision = await saveCollection(config, collection, body.data);
     json(res, 200, { ok: true, revision });
+    return;
+  }
+
+  if (body.action === "attendance-add") {
+    if (session.role !== "presensi") {
+      throw new ApiError(403, "ATTENDANCE_LINK_ROLE_REQUIRED", "Aksi ini hanya tersedia untuk akun pengisi presensi.");
+    }
+    if (!Array.isArray(body.records) || body.records.length === 0) {
+      throw new ApiError(400, "INVALID_DATA", "Tambahkan setidaknya satu catatan presensi.");
+    }
+    if (Buffer.byteLength(JSON.stringify(body.records), "utf8") > MAX_BODY_BYTES) {
+      throw new ApiError(413, "BODY_TOO_LARGE", "Ukuran data melebihi batas 4 MB.");
+    }
+    const revision = await supabaseRequest(config, "rpc/bhm_append_app_attendance", {
+      method: "POST",
+      body: JSON.stringify({ p_data: body.records })
+    });
+    json(res, 200, { ok: true, revision: Number(revision || 0) });
     return;
   }
 

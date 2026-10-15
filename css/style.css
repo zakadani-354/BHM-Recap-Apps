@@ -106,3 +106,4 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
   #member-edit-form .form-row input,#member-edit-form .form-row select{width:100%;min-width:0}
   .member-edit-actions{flex-direction:column}
 }
+.terobosan-summary{margin:20px 0;padding:20px;border:1px solid var(--border);border-radius:var(--radius);background:var(--card)}.terobosan-summary h2,.terobosan-summary h3{margin-bottom:8px}.terobosan-count-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:14px}.terobosan-count-grid article{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px;border-radius:10px;background:#ecfdf5;color:var(--brand)}.terobosan-count-grid strong{font-size:1.5rem}@media(max-width:560px){.terobosan-count-grid{grid-template-columns:1fr}}

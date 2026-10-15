@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="referrer" content="no-referrer">
 <title>BHM Recap Apps</title>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
@@ -32,7 +33,7 @@
     <div class="logo-area"><img class="brand-logo" src="logo.png" alt="Logo Yayasan Baitussalam Huda Mansurin"> <span>BHM Recap Apps</span></div>
     <nav class="nav-links">
       <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard')">Dashboard</a>
-      <a href="#presensi" class="nav-link" onclick="showPage('presensi')">Presensi</a>
+      <a href="#presensi" id="nav-presensi" class="nav-link" onclick="showPage('presensi')">Presensi</a>
       <a href="#jamaah" class="nav-link" onclick="showPage('jamaah')">Manajemen Jamaah</a>
       <a href="#asisten" class="nav-link" onclick="showPage('asisten')">Asisten AI</a>
       <a href="#admin" id="nav-admin" class="nav-link hidden" onclick="showPage('admin')">Menu Admin</a>
@@ -84,6 +85,8 @@
 
   <div class="cards" id="dashboard-cards"></div>
 
+  <section id="terobosan-summary" class="terobosan-summary" aria-live="polite"></section>
+
   <section class="chart-panel" aria-labelledby="attendance-chart-title">
     <div class="chart-heading">
       <h2 id="attendance-chart-title">Diagram Kehadiran per Kelompok</h2>
@@ -132,6 +135,16 @@
     </div>
     <form onsubmit="event.preventDefault(); addPresensi();" class="form-box">
       <input type="hidden" id="p-metode" value="Satuan">
+      <div class="form-row">
+        <label>Jenis Pengajian
+          <select id="p-jenis-pengajian" onchange="attendanceTypeChanged()">
+            <option>Pengajian Rutin</option>
+            <option>Terobosan Pusat</option>
+          </select>
+        </label>
+      </div>
+      <section id="terobosan-attendance-counts" class="terobosan-summary hidden"
+        aria-live="polite" aria-label="Jumlah kehadiran Terobosan Pusat"></section>
       <div id="attendance-single">
         <div class="form-row">
           <label>Kelompok
@@ -157,7 +170,7 @@
               <option value="">Pilih kelompok, jenis kelamin, dan peran...</option>
             </select>
           </label>
-          <label>Tanggal <input type="date" id="p-tanggal" required></label>
+          <label>Tanggal <input type="date" id="p-tanggal" required onchange="attendanceDateChanged(this)"></label>
         </div>
         <div class="form-row">
           <label>Status
@@ -194,7 +207,7 @@
               <option value="">Pilih jenis kelamin...</option><option>Pria</option><option>Wanita</option>
             </select>
           </label>
-          <label>Tanggal (input ketik) <input type="date" id="batch-date" required></label>
+          <label>Tanggal (input ketik) <input type="date" id="batch-date" required onchange="attendanceDateChanged(this)"></label>
         </div>
         <p class="section-help">Untuk input ketik, isi satu nama dan status per baris, contoh <code>Ade, H</code>. Untuk file, baris pertama berisi <code>Nama, 2026-10-01, 2026-10-08</code>; kolom pertama di baris berikutnya berisi nama dan sel tanggal berisi H (Hadir), I (Izin), S (Sakit), atau A (Alpa). Sel status yang kosong dilewati. Pilih kelompok atau Semua Kelompok, serta jenis kelamin, agar nama dicocokkan dengan data jamaah.</p>
         <div class="batch-file-import">
@@ -233,7 +246,7 @@
       <thead><tr>
         <th><input id="riwayat-select-all" type="checkbox" aria-label="Pilih semua presensi yang tampil"
           onchange="toggleAllAttendanceSelection(this.checked)"></th>
-        <th>Tanggal</th><th>Nama</th><th>Kelompok</th><th>Status</th><th>Metode</th>
+        <th>Tanggal</th><th>Jenis Pengajian</th><th>Nama</th><th>Kelompok</th><th>Status</th><th>Metode</th>
       </tr></thead>
       <tbody id="riwayat-table"></tbody>
     </table>

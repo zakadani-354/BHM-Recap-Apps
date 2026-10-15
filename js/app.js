@@ -8,6 +8,8 @@ const GROUPS = [
   "Miftahul Jannah",
   "Baitul Makmur"
 ];
+const TEROBOSAN_TYPE = "Terobosan Pusat";
+const DEFAULT_ATTENDANCE_TYPE = "Pengajian Rutin";
 const STORAGE_KEYS = {
   attendance: "bhm-recap-attendance",
   members: "bhm-recap-members",
@@ -39,6 +41,7 @@ let sharedSyncPending = 0;
 let sharedSyncBusy = false;
 let sharedDataRevision = 0;
 let sharedSyncTimer = null;
+let sharedTerobosanSummary = [];
 window.currentRole = null;
 if (JSON.stringify(jamaahData) !== JSON.stringify(savedMembers)) {
   saveMembers();
@@ -107,8 +110,15 @@ function getAccounts() {
   return accounts;
 }
 
-function saveAttendance() {
+function saveAttendance(additions = null) {
   localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
+  if (window.currentRole === "presensi") {
+    if (!Array.isArray(additions) || additions.length === 0) {
+      throw new Error("Akun pengisi hanya dapat menambahkan catatan presensi.");
+    }
+    queueSharedSave("attendance", additions, true);
+    return;
+  }
   queueSharedSave("attendance", presensiData);
 }
 
@@ -152,13 +162,15 @@ function setSyncStatus(text, state = "") {
   status.className = `sync-status${state ? ` ${state}` : ""}`;
 }
 
-function queueSharedSave(collection, data) {
+function queueSharedSave(collection, data, attendanceAppend = false) {
   if (!sharedSyncEnabled) return;
   const snapshot = JSON.parse(JSON.stringify(data));
   sharedSyncPending += 1;
   sharedSyncQueue = sharedSyncQueue
     .then(async () => {
-      const result = await requestSharedApi("save", { collection, data: snapshot });
+      const result = attendanceAppend
+        ? await requestSharedApi("attendance-add", { records: snapshot })
+        : await requestSharedApi("save", { collection, data: snapshot });
       sharedDataRevision = Math.max(sharedDataRevision, Number(result.revision || 0));
       setSyncStatus("Data bersama tersinkron", "sync-online");
     })
@@ -178,12 +190,16 @@ function cacheSharedState(state) {
   jamaahData = state.members;
   presensiData = state.attendance;
   sharedDataRevision = Number(state.revision || 0);
+  sharedTerobosanSummary = Array.isArray(state.terobosanSummary) ? state.terobosanSummary : [];
   localStorage.setItem(STORAGE_KEYS.members, JSON.stringify(jamaahData));
   localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
 }
 
 async function loadSharedData(role, state = null) {
   let remoteState = state || await requestSharedApi("", {}, "GET");
+  if (!remoteState.initialized && role === "presensi") {
+    throw new Error("Admin perlu masuk terlebih dahulu untuk menginisialisasi data bersama.");
+  }
   if (!remoteState.initialized && role !== "admin"
       && (jamaahData.length || presensiData.length)) {
     throw new Error("Data bersama belum diinisialisasi. Minta admin masuk terlebih dahulu dari perangkat yang menyimpan data awal.");
@@ -267,6 +283,10 @@ function localDateString() {
 function showPage(id) {
   const target = document.getElementById(`page-${id}`);
   if (!target) throw new Error(`Halaman "${id}" tidak ditemukan.`);
+  if (window.currentRole === "presensi" && id !== "presensi") {
+    showPage("presensi");
+    return;
+  }
   if (id === "admin" && window.currentRole !== "admin") {
     showPage("dashboard");
     return;
@@ -307,6 +327,7 @@ function setAttendanceMode(mode) {
   document.getElementById("attendance-mode-single").classList.toggle("active", isSingle);
   document.getElementById("attendance-mode-mass").classList.toggle("active", !isSingle);
   document.getElementById("p-metode").value = "Satuan";
+  updateTerobosanAttendanceCounts();
   const session = sessionStorage.getItem(SESSION_KEY);
   if (session) updateActiveSession({ attendanceMode: mode });
   if (!isSingle && barcodeScanner) {
@@ -340,7 +361,10 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   document.getElementById("main-header").style.display = "";
   document.getElementById("app").classList.remove("hidden");
   document.getElementById("current-user").textContent =
-    `${username} · ${role === "admin" ? "Admin" : "Pengurus"}`;
+    `${username} · ${role === "admin" ? "Admin" : role === "presensi" ? "Pengisi Presensi" : "Pengurus"}`;
+  document.querySelectorAll(".nav-link").forEach((link) => {
+    link.classList.toggle("hidden", role === "presensi" && link.id !== "nav-presensi");
+  });
   document.getElementById("nav-admin").classList.toggle("hidden", role !== "admin");
   setSyncStatus(
     sharedSyncEnabled ? "Data bersama tersinkron" : "Mode lokal — hanya perangkat ini",
@@ -354,6 +378,8 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
     : null;
 
   const isAdmin = role === "admin";
+  const isAttendanceOnly = role === "presensi";
+  document.querySelector("#page-presensi .tabs").classList.toggle("hidden", isAttendanceOnly);
   document.querySelector("#page-jamaah .tabs").classList.toggle("hidden", !isAdmin);
   document.querySelector("#jamaah-satuan form").classList.toggle("hidden", !isAdmin);
   if (!isAdmin) {
@@ -365,7 +391,7 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   switchTab(presensiTab === "riwayat" ? "riwayat" : "input");
   setAttendanceMode(attendanceMode === "massal" ? "massal" : "satuan");
   switchJamaahTab(jamaahTab === "file" ? "file" : "satuan");
-  showPage(page === "admin" && !isAdmin ? "dashboard" : page);
+  showPage(isAttendanceOnly ? "presensi" : page === "admin" && !isAdmin ? "dashboard" : page);
 }
 
 async function restoreActiveSession() {
@@ -385,7 +411,10 @@ async function restoreActiveSession() {
   }
   const username = String(activeSession.username || "").toLowerCase();
   const validPages = ["dashboard", "presensi", "jamaah", "asisten", "admin"];
-  if (!["admin", "pengurus"].includes(username)
+  const validIdentity = (username === "presensi" && activeSession.role === "presensi")
+    || (["admin", "pengurus"].includes(username)
+      && ["admin", "pengurus"].includes(activeSession.role));
+  if (!validIdentity
       || !validPages.includes(activeSession.page || "dashboard")) {
     sessionStorage.removeItem(SESSION_KEY);
     return;
@@ -398,6 +427,7 @@ async function restoreActiveSession() {
           || remoteState.user?.role !== activeSession.role) {
         throw new Error("Identitas sesi tidak sesuai. Silakan masuk kembali.");
       }
+
       await loadSharedData(activeSession.role, remoteState);
       openApp(
         username,
@@ -433,6 +463,27 @@ async function restoreActiveSession() {
     activeSession.jamaahTab || "satuan",
     activeSession.attendanceMode || "satuan"
   );
+}
+
+async function autoLoginAttendanceLink() {
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get("presensi");
+  if (!token) {
+    await restoreActiveSession();
+    return;
+  }
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  const error = document.getElementById("login-error");
+  try {
+    const credentials = await requestSharedApi("attendance-link-login", { token });
+    sharedSyncEnabled = true;
+    await loadSharedData(credentials.role);
+    finishLogin(credentials.username, credentials.role, true);
+  } catch (loginError) {
+    sharedSyncEnabled = false;
+    error.textContent = `Tautan presensi tidak dapat digunakan: ${loginError.message}`;
+    error.classList.remove("hidden");
+  }
 }
 
 function finishLogin(username, role, shared) {
@@ -540,11 +591,12 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
   });
   const sessionMembers = new Map();
   records.forEach((record) => {
-    const sessionKey = `${record.kelompok}\u0000${record.tanggal}`;
+    const sessionKey = `${record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE}\u0000${record.kelompok}\u0000${record.tanggal}`;
     if (!sessionMembers.has(sessionKey)) {
       sessionMembers.set(sessionKey, {
         group: record.kelompok,
         date: record.tanggal,
+        type: record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE,
         attendedMemberIds: new Set()
       });
     }
@@ -553,7 +605,7 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
   });
 
   const automaticAlpa = [];
-  sessionMembers.forEach(({ group, date, attendedMemberIds }) => {
+  sessionMembers.forEach(({ group, date, type, attendedMemberIds }) => {
     (memberLookup.membersByGroup.get(group) || []).forEach((member) => {
       if (!attendedMemberIds.has(member.id)) {
         automaticAlpa.push({
@@ -561,6 +613,7 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
           nama: member.nama,
           kelompok: member.kelompok,
           tanggal: date,
+          jenisPengajian: type,
           status: "Alpa",
           metode: "Otomatis"
         });
@@ -845,9 +898,9 @@ function renderDashboard() {
   const totalMeetings = new Set(allMonthRecords.map((record) => record.tanggal)).size;
   const totalAttendance = allMonthRecords.filter((record) => record.status === "Hadir").length;
   const meetingSessions = new Set(allMonthRecords.map((record) =>
-    `${record.kelompok}\u0000${record.tanggal}`));
+    `${record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE}\u0000${record.kelompok}\u0000${record.tanggal}`));
   const totalCapacity = [...meetingSessions].reduce((capacity, sessionKey) => {
-    const group = sessionKey.split("\u0000")[0];
+    const group = sessionKey.split("\u0000")[1];
     return capacity + (memberLookup.membersByGroup.get(group)?.length || 0);
   }, 0);
 
@@ -943,6 +996,7 @@ function renderDashboard() {
     ? `<button class="btn-secondary dashboard-detail-button" type="button" onclick="showDashboardDetails('${type}')" ${value ? "" : "disabled"}>Rincian</button>`
     : ""}
     </article>`).join("");
+  renderTerobosanSummary();
 
   document.getElementById("attendance-chart").innerHTML = chartGroups.length
     ? chartGroups.map(({ group, records, percentage }) => {
@@ -962,6 +1016,137 @@ function renderDashboard() {
   renderStatusDonut(allMonthRecords, totalMeetings, true);
 }
 
+function terobosanDatesForYear(year, records = presensiData) {
+  const dates = records
+    .filter((record) => record.jenisPengajian === TEROBOSAN_TYPE
+      && record.tanggal?.slice(0, 4) === String(year))
+    .map((record) => record.tanggal);
+  if (window.currentRole === "presensi") {
+    dates.push(...sharedTerobosanSummary
+      .filter((event) => event.date?.slice(0, 4) === String(year))
+      .map((event) => event.date));
+  }
+  return [...new Set(dates)].sort();
+}
+
+function validateTerobosanDates(additions) {
+  const dateByYear = new Map();
+  [...presensiData, ...additions]
+    .filter((record) => record.jenisPengajian === TEROBOSAN_TYPE)
+    .forEach((record) => {
+      const year = record.tanggal?.slice(0, 4);
+      if (!year || !/^\d{4}-\d{2}-\d{2}$/.test(record.tanggal)) {
+        throw new Error("Tanggal Terobosan Pusat tidak valid.");
+      }
+      if (dateByYear.has(year) && dateByYear.get(year) !== record.tanggal) {
+        throw new Error(`Terobosan Pusat tahun ${year} hanya boleh memiliki satu tanggal acara.`);
+      }
+      dateByYear.set(year, record.tanggal);
+    });
+}
+
+function terobosanAttendanceCounts(date) {
+  const attendedMembers = new Set();
+  const counts = { Pria: 0, Wanita: 0 };
+  if (window.currentRole === "presensi") {
+    const summary = sharedTerobosanSummary.find((event) => event.date === date);
+    if (summary?.counts) {
+      counts.Pria = Number(summary.counts.Pria || 0);
+      counts.Wanita = Number(summary.counts.Wanita || 0);
+    }
+  }
+  presensiData.filter((record) =>
+    record.jenisPengajian === TEROBOSAN_TYPE
+      && record.tanggal === date
+      && record.status === "Hadir")
+    .forEach((record) => {
+      const member = memberForRecord(record);
+      if (!member || !Object.prototype.hasOwnProperty.call(counts, member.jenisKelamin)) return;
+      const identity = member.id || `${normalizeNameForMatch(record.nama)}\u0000${record.kelompok}`;
+      if (attendedMembers.has(identity)) return;
+      attendedMembers.add(identity);
+      counts[member.jenisKelamin] += 1;
+    });
+  return counts;
+}
+
+function renderTerobosanSummary() {
+  const year = new Date().getFullYear();
+  const dates = terobosanDatesForYear(year);
+  const summary = document.getElementById("terobosan-summary");
+  if (!summary) return;
+  if (dates.length > 1) {
+    summary.innerHTML = `<h2>Terobosan Pusat ${year}</h2>
+      <p class="form-message error-message">Data memiliki lebih dari satu tanggal acara pada tahun ini. Minta admin memeriksa data.</p>`;
+    return;
+  }
+  const eventDate = dates[0];
+  const counts = eventDate ? terobosanAttendanceCounts(eventDate) : { Pria: 0, Wanita: 0 };
+  summary.innerHTML = `<h2>Terobosan Pusat ${year}</h2>
+    <p>${eventDate ? `Tanggal acara: ${escapeHtml(eventDate)}` : "Belum ada catatan acara tahun ini."}</p>
+    <div class="terobosan-count-grid">
+      <article><span>Pria hadir</span><strong>${counts.Pria}</strong></article>
+      <article><span>Wanita hadir</span><strong>${counts.Wanita}</strong></article>
+    </div>`;
+}
+
+function attendanceTypeChanged() {
+  const isTerobosan = document.getElementById("p-jenis-pengajian").value === TEROBOSAN_TYPE;
+  const dateInputs = [
+    document.getElementById("p-tanggal"),
+    document.getElementById("batch-date")
+  ];
+  dateInputs.forEach((input) => { input.readOnly = false; });
+  const countsPanel = document.getElementById("terobosan-attendance-counts");
+  countsPanel.classList.toggle("hidden", !isTerobosan);
+  if (isTerobosan) {
+    const selectedDate = document.getElementById("attendance-single").classList.contains("hidden")
+      ? dateInputs[1].value
+      : dateInputs[0].value;
+    const year = (selectedDate || localDateString()).slice(0, 4);
+    const dates = terobosanDatesForYear(year);
+    if (dates.length === 1) {
+      dateInputs.forEach((input) => {
+        input.value = dates[0];
+        input.readOnly = true;
+      });
+    }
+  }
+  updateTerobosanAttendanceCounts();
+}
+
+function attendanceDateChanged(input) {
+  if (document.getElementById("p-jenis-pengajian").value !== TEROBOSAN_TYPE) return;
+  const dates = terobosanDatesForYear(input.value.slice(0, 4));
+  if (dates.length > 1 || (dates.length === 1 && dates[0] !== input.value)) {
+    alert(dates.length > 1
+      ? `Data Terobosan Pusat tahun ${input.value.slice(0, 4)} memiliki beberapa tanggal. Minta admin memeriksa data.`
+      : `Terobosan Pusat tahun ${input.value.slice(0, 4)} sudah dijadwalkan pada ${dates[0]}.`);
+    if (dates.length === 1) {
+      input.value = dates[0];
+      input.readOnly = true;
+    }
+  }
+  updateTerobosanAttendanceCounts();
+}
+
+function updateTerobosanAttendanceCounts() {
+  const panel = document.getElementById("terobosan-attendance-counts");
+  if (!panel || document.getElementById("p-jenis-pengajian").value !== TEROBOSAN_TYPE) return;
+  const date = document.getElementById("attendance-single").classList.contains("hidden")
+    ? document.getElementById("batch-date").value
+    : document.getElementById("p-tanggal").value;
+  const dates = date ? terobosanDatesForYear(date.slice(0, 4)) : [];
+  const eventDate = dates.length === 1 ? dates[0] : date;
+  const counts = eventDate ? terobosanAttendanceCounts(eventDate) : { Pria: 0, Wanita: 0 };
+  panel.innerHTML = `<h3>Jumlah Kehadiran Terobosan Pusat ${escapeHtml(eventDate?.slice(0, 4) || "")}</h3>
+    <p>${eventDate ? `Tanggal acara: ${escapeHtml(eventDate)}` : "Pilih tanggal acara."}</p>
+    <div class="terobosan-count-grid">
+      <article><span>Pria hadir</span><strong>${counts.Pria}</strong></article>
+      <article><span>Wanita hadir</span><strong>${counts.Wanita}</strong></article>
+    </div>`;
+}
+
 function renderRiwayat() {
   const group = document.getElementById("r-kelompok").value;
   const records = presensiData
@@ -975,11 +1160,12 @@ function renderRiwayat() {
         aria-label="Pilih presensi ${escapeHtml(record.nama)} tanggal ${escapeHtml(record.tanggal)}"
         onchange="updateAttendanceSelection()"></td>
       <td>${escapeHtml(record.tanggal)}</td>
+      <td>${escapeHtml(record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE)}</td>
       <td>${escapeHtml(record.nama)}</td>
       <td>${escapeHtml(record.kelompok)}</td>
       <td>${escapeHtml(record.status)}</td>
       <td>${escapeHtml(record.metode)}</td>
-    </tr>`).join("") || '<tr><td colspan="6">Belum ada riwayat presensi.</td></tr>';
+    </tr>`).join("") || '<tr><td colspan="7">Belum ada riwayat presensi.</td></tr>';
   document.getElementById("riwayat-select-all").checked = false;
   document.getElementById("riwayat-select-all").indeterminate = false;
   updateAttendanceSelection();
@@ -1003,6 +1189,10 @@ function toggleAllAttendanceSelection(checked) {
 }
 
 function deleteSelectedAttendance() {
+  if (window.currentRole === "presensi") {
+    alert("Akun pengisi presensi tidak dapat menghapus catatan.");
+    return;
+  }
   const selectedIndices = new Set(
     [...document.querySelectorAll("#riwayat-table .attendance-row-select:checked")]
       .map((checkbox) => Number(checkbox.value))
@@ -1017,6 +1207,7 @@ function deleteSelectedAttendance() {
   message.className = "form-message success-message";
   renderRiwayat();
   renderDashboard();
+  updateTerobosanAttendanceCounts();
 }
 
 function renderJamaah() {
@@ -1461,6 +1652,7 @@ function resolveBatchPresensi(group, gender) {
       nama: member.nama,
       kelompok: member.kelompok,
       tanggal: date,
+      jenisPengajian: document.getElementById("p-jenis-pengajian").value,
       status,
       metode: "Massal"
     };
@@ -1577,6 +1769,7 @@ function addPresensi() {
     nama: member?.nama || "",
     kelompok: document.getElementById("p-kelompok").value,
     tanggal: document.getElementById("p-tanggal").value,
+    jenisPengajian: document.getElementById("p-jenis-pengajian").value,
     status: document.getElementById("p-status").value,
     metode: document.getElementById("p-metode").value
   };
@@ -1585,11 +1778,17 @@ function addPresensi() {
     return;
   }
   if (hasAttendance(record)) {
-    alert("Presensi untuk nama, kelompok, dan tanggal tersebut sudah ada.");
+    alert("Presensi untuk nama, kelompok, jenis pengajian, dan tanggal tersebut sudah ada.");
+    return;
+  }
+  try {
+    validateTerobosanDates([record]);
+  } catch (error) {
+    alert(error.message);
     return;
   }
   presensiData.push(record);
-  saveAttendance();
+  saveAttendance([record]);
   if (record.metode === "Barcode") {
     document.querySelector("#tab-input form").reset();
     document.getElementById("scanner-message").textContent = "";
@@ -1598,8 +1797,10 @@ function addPresensi() {
     document.getElementById("p-nama").value = "";
     document.getElementById("p-metode").value = "Satuan";
   }
+  attendanceTypeChanged();
   renderRiwayat();
   renderDashboard();
+  updateTerobosanAttendanceCounts();
   updateAttendanceMemberOptions();
   alert("Presensi disimpan.");
 }
@@ -1611,7 +1812,11 @@ function hasAttendance(record, pending = []) {
     const sameMemberId = record.memberId && item.memberId && item.memberId === record.memberId;
     const sameNameAndGroup = normalizeNameForMatch(item.nama) === recordName
       && normalizeGroupForMatch(item.kelompok) === normalizeGroupForMatch(record.kelompok);
-    return (sameMemberId || sameNameAndGroup) && item.tanggal === record.tanggal;
+    const recordType = record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE;
+    const itemType = item.jenisPengajian || DEFAULT_ATTENDANCE_TYPE;
+    return (sameMemberId || sameNameAndGroup)
+      && item.tanggal === record.tanggal
+      && itemType === recordType;
   });
 }
 
@@ -1850,8 +2055,10 @@ function addBatchPresensi() {
       message.className = `form-message ${skipped.length ? "warning-message" : "error-message"}`;
       return;
     }
+    validateTerobosanDates(incoming);
     presensiData.push(...incoming);
-    saveAttendance();
+    saveAttendance(incoming);
+    attendanceTypeChanged();
     document.getElementById("attendance-batch").value = "";
     document.getElementById("attendance-batch-file").value = "";
     attendanceBatchFileData = null;
@@ -1877,8 +2084,9 @@ function exportRiwayat() {
     return;
   }
   const quote = (value) => `"${String(value).replace(/"/g, '""')}"`;
-  const csv = [["Tanggal", "Nama", "Kelompok", "Status", "Metode"], ...records.map((record) => [
-    record.tanggal, record.nama, record.kelompok, record.status, record.metode
+  const csv = [["Tanggal", "Jenis Pengajian", "Nama", "Kelompok", "Status", "Metode"], ...records.map((record) => [
+    record.tanggal, record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE,
+    record.nama, record.kelompok, record.status, record.metode
   ])].map((row) => row.map(quote).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
@@ -1953,13 +2161,14 @@ async function changeAccountPassword() {
 document.getElementById("f-bulan-mode").value = "month";
 document.getElementById("p-tanggal").value = localDateString();
 document.getElementById("batch-date").value = localDateString();
+attendanceTypeChanged();
 window.addEventListener("focus", () => {
   if (sharedSyncEnabled) refreshSharedData();
 });
 renderDashboard();
 renderRiwayat();
 renderJamaah();
-restoreActiveSession().catch((error) => {
+autoLoginAttendanceLink().catch((error) => {
   console.error("Could not restore the active session.", error);
   const message = document.getElementById("login-error");
   message.textContent = `Sesi tidak dapat dipulihkan: ${error.message}`;
