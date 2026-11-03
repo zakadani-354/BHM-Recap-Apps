@@ -253,7 +253,7 @@ begin
       or coalesce(entry->>'jenisPengajian', 'Pengajian Rutin')
         not in ('Pengajian Rutin', 'Terobosan Pusat')
       or entry->>'metode' is null
-      or entry->>'metode' not in ('Satuan', 'Barcode')
+      or entry->>'metode' not in ('Satuan', 'Barcode', 'Massal')
       or not exists (
         select 1
         from jsonb_array_elements(current_members) as roster(member)
@@ -364,7 +364,8 @@ begin
       or entry->>'jenisKelamin' not in ('Pria', 'Wanita')
       or entry->>'status' is null
       or entry->>'status' not in ('Hadir', 'Izin', 'Sakit', 'Alpa')
-      or entry->>'metode' is distinct from 'Satuan'
+      or entry->>'metode' is null
+      or entry->>'metode' not in ('Satuan', 'Barcode', 'Massal')
   ) then
     raise exception 'Terobosan Pusat attendance contains an invalid record';
   end if;

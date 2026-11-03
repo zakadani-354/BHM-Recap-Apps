@@ -8,6 +8,8 @@ serverless function alongside the static app.
    entire [`schema.sql`](./schema.sql) script. The final result row must show
    `true` for all eight `*_ready` columns. If not, check the SQL Editor output
    for the first error and fix it before retrying the login.
+   When deploying an app update that changes these database functions, run the
+   full script again so the deployed RPC validation matches the app.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
    (Production, and Preview/Development if you use them), then redeploy:

@@ -119,6 +119,10 @@ function saveAttendance(additions = null) {
     queueSharedSave("attendance", additions, true);
     return;
   }
+  if (Array.isArray(additions) && additions.length > 0) {
+    queueSharedSave("attendance", additions, true);
+    return;
+  }
   queueSharedSave("attendance", presensiData);
 }
 
@@ -1705,6 +1709,7 @@ function resolveBatchPresensi(group, gender) {
       nama: member.nama,
       kelompok: member.kelompok,
       tanggal: date,
+      jenisKelamin: member.jenisKelamin,
       jenisPengajian: document.getElementById("p-jenis-pengajian").value,
       status,
       metode: "Massal"

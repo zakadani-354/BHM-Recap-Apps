@@ -418,20 +418,32 @@ async function handle(req, res) {
   }
 
   if (body.action === "attendance-add") {
-    if (session.role !== "presensi") {
-      throw new ApiError(403, "ATTENDANCE_LINK_ROLE_REQUIRED", "Aksi ini hanya tersedia untuk akun pengisi presensi.");
-    }
     if (!Array.isArray(body.records) || body.records.length === 0) {
       throw new ApiError(400, "INVALID_DATA", "Tambahkan setidaknya satu catatan presensi.");
-    }
-    if (body.records.some((record) => record?.metode !== "Satuan"
-        || record?.jenisPengajian !== "Terobosan Pusat")) {
-      throw new ApiError(403, "ATTENDANCE_TYPE_NOT_ALLOWED", "Akun tautan hanya dapat menambahkan presensi satuan Terobosan Pusat.");
     }
     if (Buffer.byteLength(JSON.stringify(body.records), "utf8") > MAX_BODY_BYTES) {
       throw new ApiError(413, "BODY_TOO_LARGE", "Ukuran data melebihi batas 4 MB.");
     }
-    const revision = await supabaseRequest(config, "rpc/bhm_append_terobosan_attendance", {
+
+    const includesTerobosan = body.records.some((record) =>
+      record?.jenisPengajian === "Terobosan Pusat");
+    let appendFunction;
+    if (session.role === "presensi") {
+      if (body.records.some((record) => record?.metode !== "Satuan"
+          || record?.jenisPengajian !== "Terobosan Pusat")) {
+        throw new ApiError(403, "ATTENDANCE_TYPE_NOT_ALLOWED", "Akun tautan hanya dapat menambahkan presensi satuan Terobosan Pusat.");
+      }
+      appendFunction = "bhm_append_terobosan_attendance";
+    } else if (includesTerobosan) {
+      if (body.records.some((record) => record?.jenisPengajian !== "Terobosan Pusat")) {
+        throw new ApiError(400, "MIXED_ATTENDANCE_TYPES", "Simpan data presensi per jenis pengajian.");
+      }
+      appendFunction = "bhm_append_terobosan_attendance";
+    } else {
+      appendFunction = "bhm_append_app_attendance";
+    }
+
+    const revision = await supabaseRequest(config, `rpc/${appendFunction}`, {
       method: "POST",
       body: JSON.stringify({ p_data: body.records })
     });
