@@ -616,8 +616,28 @@ function isDashboardJamaahRecord(record, memberLookup) {
   return memberLookup.find(record)?.peran?.toLowerCase() === "jamaah";
 }
 
+function isFridayAttendance(record) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(record.tanggal)
+    && new Date(`${record.tanggal}T00:00:00Z`).getUTCDay() === 5;
+}
+
+function dashboardMeetingDates(records) {
+  return new Set(records.filter(isFridayAttendance).map((record) => record.tanggal));
+}
+
+function countDistinctPresentAttendances(records, memberLookup) {
+  const attendances = new Set();
+  records.forEach((record) => {
+    if (record.status !== "Hadir" || !isDashboardJamaahRecord(record, memberLookup)) return;
+    const member = memberLookup.find(record);
+    if (member) attendances.add(`${member.id}\u0000${record.tanggal}`);
+  });
+  return attendances.size;
+}
+
 function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup) {
   const records = presensiData.filter((record) => {
+    if (!isFridayAttendance(record)) return false;
     const recordMonth = record.tanggal.slice(0, 7);
     return (!startMonth || recordMonth >= startMonth)
       && (!endMonth || recordMonth <= endMonth)
@@ -625,7 +645,7 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
   });
   const sessionMembers = new Map();
   records.forEach((record) => {
-    const sessionKey = `${record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE}\u0000${record.kelompok}\u0000${record.tanggal}`;
+    const sessionKey = `${record.kelompok}\u0000${record.tanggal}`;
     if (!sessionMembers.has(sessionKey)) {
       sessionMembers.set(sessionKey, {
         group: record.kelompok,
@@ -635,7 +655,9 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
       });
     }
     const member = memberLookup.find(record);
-    if (member) sessionMembers.get(sessionKey).attendedMemberIds.add(member.id);
+    if (member?.peran?.toLowerCase() === "jamaah") {
+      sessionMembers.get(sessionKey).attendedMemberIds.add(member.id);
+    }
   });
 
   const automaticAlpa = [];
@@ -680,16 +702,19 @@ function selectedPeriodRecords() {
     records.forEach((record) => {
       if (!isDashboardJamaahRecord(record, memberLookup)) return;
       if (!groupRecords.has(record.kelompok)) {
-        groupRecords.set(record.kelompok, { records: [], present: 0 });
+        groupRecords.set(record.kelompok, { records: [], dates: new Set() });
       }
       const group = groupRecords.get(record.kelompok);
       group.records.push(record);
-      if (record.status === "Hadir") group.present += 1;
+      group.dates.add(record.tanggal);
     });
     return groupNames.map((group) => {
       const summary = groupRecords.get(group);
       const groupRecordsList = summary?.records || [];
-      const rate = groupRecordsList.length ? summary.present / groupRecordsList.length : 0;
+      const members = memberLookup.membersByGroup.get(group) || [];
+      const capacity = members.length * (summary?.dates.size || 0);
+      const present = countDistinctPresentAttendances(groupRecordsList, memberLookup);
+      const rate = capacity ? present / capacity : 0;
       return {
         group,
         records: groupRecordsList,
@@ -914,15 +939,12 @@ function renderAttendanceTrend(selectedGroup, memberLookup) {
     .sort();
   const points = monthKeys.map((month) => {
     const records = dashboardRecordsForPeriod(month, month, selectedGroup, memberLookup);
-    const sessions = new Map();
-    records.forEach((record) => {
-      const key = `${record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE}\u0000${record.kelompok}\u0000${record.tanggal}`;
-      if (!sessions.has(key)) sessions.set(key, record.kelompok);
-    });
-    const capacity = [...sessions.values()].reduce((total, group) =>
-      total + (memberLookup.membersByGroup.get(group)?.length || 0), 0);
-    const present = records.filter((record) => record.status === "Hadir"
-      && isDashboardJamaahRecord(record, memberLookup)).length;
+    const meetingCount = dashboardMeetingDates(records).size;
+    const members = selectedGroup
+      ? memberLookup.membersByGroup.get(selectedGroup) || []
+      : [...memberLookup.membersByGroup.values()].flat();
+    const capacity = meetingCount * members.length;
+    const present = countDistinctPresentAttendances(records, memberLookup);
     return { month, rate: capacity ? present / capacity * 100 : 0 };
   });
   const chart = document.getElementById("attendance-trend-chart");
@@ -981,26 +1003,17 @@ function renderDashboard() {
     selectedGroup,
     memberLookup
   } = selectedPeriodRecords();
-  const meetingSessions = new Map();
-  allMonthRecords.forEach((record) => {
-    const key = `${record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE}\u0000${record.kelompok}\u0000${record.tanggal}`;
-    if (!meetingSessions.has(key)) meetingSessions.set(key, record.kelompok);
-  });
-  const sessionsByGroup = new Map();
-  meetingSessions.forEach((group) => sessionsByGroup.set(group, (sessionsByGroup.get(group) || 0) + 1));
-  const totalMeetings = meetingSessions.size;
-  const totalAttendance = allMonthRecords.filter((record) => record.status === "Hadir"
-    && isDashboardJamaahRecord(record, memberLookup)).length;
-  const totalCapacity = [...meetingSessions.values()].reduce((capacity, group) => {
-    return capacity + (memberLookup.membersByGroup.get(group)?.length || 0);
-  }, 0);
+  const meetingDates = dashboardMeetingDates(allMonthRecords);
+  const totalMeetings = meetingDates.size;
+  const totalAttendance = countDistinctPresentAttendances(allMonthRecords, memberLookup);
 
   const memberAttendance = new Map();
   allMonthRecords.forEach((record) => {
     if (record.status !== "Hadir" || !isDashboardJamaahRecord(record, memberLookup)) return;
     const member = memberLookup.find(record);
     if (!member) return;
-    memberAttendance.set(member.id, (memberAttendance.get(member.id) || 0) + 1);
+    if (!memberAttendance.has(member.id)) memberAttendance.set(member.id, new Set());
+    memberAttendance.get(member.id).add(record.tanggal);
   });
   const eligibleMembers = jamaahData.filter((member) =>
     member.peran.toLowerCase() === "jamaah"
@@ -1013,25 +1026,18 @@ function renderDashboard() {
       genderMemberTotals[member.jenisKelamin] += 1;
     }
   });
-  meetingSessions.forEach((group) => {
-    (memberLookup.membersByGroup.get(group) || []).forEach((member) => {
-      if (genderCapacity[member.jenisKelamin] !== undefined) {
-        genderCapacity[member.jenisKelamin] += 1;
-      }
-    });
-  });
-  allMonthRecords.forEach((record) => {
-    if (record.status !== "Hadir" || !isDashboardJamaahRecord(record, memberLookup)) return;
-    const member = memberLookup.find(record);
-    if (member && genderAttendance[member.jenisKelamin] !== undefined) {
-      genderAttendance[member.jenisKelamin] += 1;
+  genderCapacity.Pria = genderMemberTotals.Pria * totalMeetings;
+  genderCapacity.Wanita = genderMemberTotals.Wanita * totalMeetings;
+  eligibleMembers.forEach((member) => {
+    if (genderAttendance[member.jenisKelamin] !== undefined) {
+      genderAttendance[member.jenisKelamin] += memberAttendance.get(member.id)?.size || 0;
     }
   });
   const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [], full: [] }]));
   eligibleMembers.forEach((member) => {
-    const meetingCount = sessionsByGroup.get(member.kelompok) || 0;
+    const meetingCount = totalMeetings;
     if (!meetingCount) return;
-    const rate = (memberAttendance.get(member.id) || 0) / meetingCount;
+    const rate = (memberAttendance.get(member.id)?.size || 0) / meetingCount;
     const counts = groupAttendanceCounts.get(member.kelompok);
     if (!counts) return;
     if (rate === 0) counts.zero.push({ name: member.nama, group: member.kelompok });
@@ -1054,6 +1060,7 @@ function renderDashboard() {
           : `Sampai ${formatMonth(endMonth)}`
       : "Seluruh bulan";
 
+  const totalCapacity = totalMeetings * eligibleMembers.length;
   const attendanceRate = totalCapacity ? totalAttendance / totalCapacity * 100 : 0;
   const percentPria = genderCapacity.Pria ? genderAttendance.Pria / genderCapacity.Pria * 100 : 0;
   const percentWanita = genderCapacity.Wanita ? genderAttendance.Wanita / genderCapacity.Wanita * 100 : 0;
