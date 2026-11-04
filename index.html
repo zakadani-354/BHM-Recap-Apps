@@ -41,7 +41,7 @@
     </div>
     <nav class="sidebar-nav">
       <p class="sidebar-section-label">Dashboard Pengajian</p>
-      <button type="button" class="sidebar-link active" data-attendance-type="Pengajian Umum"
+      <button type="button" class="sidebar-link" data-attendance-type="Pengajian Umum"
         onclick="selectDashboardType('Pengajian Umum')"><i class="fa-solid fa-mosque"></i><span>Pengajian Umum</span></button>
       <button type="button" class="sidebar-link" data-attendance-type="Pengajian Pengurus"
         onclick="selectDashboardType('Pengajian Pengurus')"><i class="fa-solid fa-user-tie"></i><span>Pengajian Pengurus</span></button>
@@ -54,10 +54,10 @@
         onclick="selectDashboardType('Terobosan Pusat')"><i class="fa-solid fa-star-and-crescent"></i><span>Terobosan Pusat</span></button>
 
       <p class="sidebar-section-label sidebar-workspace-label">Workspace</p>
-      <a href="#presensi" id="nav-presensi" class="sidebar-link" onclick="showPage('presensi')"><i class="fa-solid fa-clipboard-check"></i><span>Input Presensi</span></a>
-      <a href="#jamaah" class="sidebar-link" onclick="showPage('jamaah')"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
-      <a href="#asisten" class="sidebar-link" onclick="showPage('asisten')"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
-      <a href="#admin" id="nav-admin" class="sidebar-link hidden" onclick="showPage('admin')"><i class="fa-solid fa-gear"></i><span>Pengaturan</span></a>
+      <a href="#presensi" id="nav-presensi" class="sidebar-link" onclick="showPage('presensi', true)"><i class="fa-solid fa-clipboard-check"></i><span>Input Presensi</span></a>
+      <a href="#jamaah" class="sidebar-link" onclick="showPage('jamaah', true)"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
+      <a href="#asisten" class="sidebar-link" onclick="showPage('asisten', true)"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
+      <a href="#admin" id="nav-admin" class="sidebar-link hidden" onclick="showPage('admin', true)"><i class="fa-solid fa-gear"></i><span>Pengaturan</span></a>
     </nav>
     <div class="sidebar-footer">
       <span class="sidebar-footer-mark"><i class="fa-solid fa-leaf"></i></span>
