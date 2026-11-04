@@ -5,6 +5,30 @@ const crypto = require("node:crypto");
 const COOKIE_NAME = "bhm-session";
 const SESSION_DURATION_SECONDS = 60 * 60 * 8;
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
+const SUPABASE_VALIDATION_MESSAGES = {
+  "Attendance additions must be a non-empty array":
+    "Tidak ada catatan presensi yang dapat disimpan. Muat ulang halaman lalu coba lagi.",
+  "Attendance addition contains an invalid member or record":
+    "Data presensi tidak cocok dengan jamaah, kelompok, atau kategori pengajian. Jika baru menggunakan kategori pengajian baru, jalankan ulang supabase/schema.sql di Supabase SQL Editor.",
+  "Attendance record already exists":
+    "Presensi untuk jamaah, tanggal, dan kategori tersebut sudah tersimpan. Muat ulang halaman untuk memperbarui data.",
+  "Attendance additions contain duplicate records":
+    "Daftar berisi presensi ganda untuk jamaah, tanggal, dan kategori yang sama. Hapus entri ganda lalu coba lagi.",
+  "Terobosan Pusat attendance requires an ISO date":
+    "Tanggal acara Terobosan Pusat tidak valid. Pilih tanggal yang benar lalu coba lagi.",
+  "Terobosan Pusat is limited to one event date per year":
+    "Tanggal acara Terobosan Pusat tahun ini berbeda dari tanggal yang sudah tersimpan. Gunakan tanggal acara yang sudah ditetapkan.",
+  "Terobosan Pusat attendance contains an invalid record":
+    "Data presensi Terobosan Pusat tidak valid. Periksa nama, kelompok, jenis kelamin, status, dan metode presensi.",
+  "Terobosan Pusat attendance requires a valid ISO date":
+    "Tanggal acara Terobosan Pusat tidak valid. Pilih tanggal yang benar lalu coba lagi.",
+  "A single submission must use one Terobosan Pusat event date":
+    "Satu penyimpanan Terobosan Pusat hanya boleh menggunakan satu tanggal acara.",
+  "Attendance member details do not match the shared roster":
+    "Data jamaah Terobosan Pusat tidak cocok dengan daftar jamaah bersama. Muat ulang data jamaah lalu coba lagi.",
+  "Terobosan Pusat attendance record already exists":
+    "Presensi Terobosan Pusat untuk jamaah tersebut sudah tersimpan."
+};
 
 class ApiError extends Error {
   constructor(status, code, message) {
@@ -107,6 +131,13 @@ async function supabaseRequest(config, path, options = {}) {
       message = "Fungsi atau tabel Supabase belum ditemukan. Jalankan ulang supabase/schema.sql di SQL Editor, lalu coba lagi.";
     } else if (authorizationFailure) {
       message = "Supabase menolak akses server. Periksa SUPABASE_URL dan SUPABASE_SERVICE_ROLE_KEY di Vercel, lalu redeploy.";
+    } else if (diagnostic.code === "P0001") {
+      message = Object.prototype.hasOwnProperty.call(
+        SUPABASE_VALIDATION_MESSAGES,
+        diagnostic.message
+      )
+        ? SUPABASE_VALIDATION_MESSAGES[diagnostic.message]
+        : "Data ditolak oleh aturan validasi Supabase (P0001). Periksa log Function di Vercel untuk detailnya.";
     } else if (response.status === 404 && diagnostic.response === "Non-JSON error response") {
       message = "Supabase mengembalikan halaman 404, bukan respons API. Pastikan SUPABASE_URL di Vercel hanya berisi Project URL dasar, contoh https://<project-ref>.supabase.co, tanpa /rest/v1.";
     }

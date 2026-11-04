@@ -77,6 +77,11 @@ code, but never logs the API key or login password.
   that `SUPABASE_SERVICE_ROLE_KEY` is the server-side service-role key rather
   than the anon/publishable key. Confirm the variables are enabled for the
   deployment's environment and redeploy after changing them.
+- `P0001`: Supabase rejected the submitted data through a database validation
+  rule. The app now displays the matching validation reason when it is known.
+  If it mentions an invalid member or pengajian category after adding the new
+  categories, run the complete `schema.sql` in the matching Supabase project,
+  then redeploy the latest app in Vercel.
 - Any other status or code: check that `SUPABASE_URL` is the Project URL for the
   same Supabase project where `schema.sql` was run.
 - A plain HTTP 404 without a Supabase error code usually means `SUPABASE_URL`
