@@ -10,6 +10,9 @@ serverless function alongside the static app.
    for the first error and fix it before retrying the login.
    When deploying an app update that changes these database functions, run the
    full script again so the deployed RPC validation matches the app.
+   The updated script migrates legacy `Pengajian Rutin` records to
+   `Pengajian Umum` and enables the Pengajian Pengurus, Pengajian Ibu-Ibu Desa,
+   and ASAD Wanita attendance categories.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
    (Production, and Preview/Development if you use them), then redeploy:

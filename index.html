@@ -28,25 +28,48 @@
   </div>
 </section>
 
-<header class="topbar" id="main-header" style="display:none">
-  <div class="container topbar-inner">
-    <div class="logo-area"><img class="brand-logo" src="logo.png" alt="Logo Yayasan Baitussalam Huda Mansurin"> <span>BHM Recap Apps</span></div>
-    <nav class="nav-links">
-      <a href="#dashboard" class="nav-link active" onclick="showPage('dashboard')">Dashboard</a>
-      <a href="#presensi" id="nav-presensi" class="nav-link" onclick="showPage('presensi')">Presensi</a>
-      <a href="#jamaah" class="nav-link" onclick="showPage('jamaah')">Manajemen Jamaah</a>
-      <a href="#asisten" class="nav-link" onclick="showPage('asisten')">Asisten AI</a>
-      <a href="#admin" id="nav-admin" class="nav-link hidden" onclick="showPage('admin')">Menu Admin</a>
-    </nav>
-    <div class="account-tools">
+<main class="app-shell hidden" id="app">
+  <aside class="app-sidebar" aria-label="Navigasi utama">
+    <a class="sidebar-brand" href="#dashboard" onclick="selectDashboardType('Pengajian Umum')">
+      <img class="brand-logo" src="logo.png" alt="">
+      <span><strong>BHM Recap</strong><small>Presensi Jamaah</small></span>
+    </a>
+    <div class="sidebar-account">
+      <span class="sidebar-avatar"><i class="fa-solid fa-user"></i></span>
       <span id="current-user"></span>
       <span id="sync-status" class="sync-status" role="status"></span>
-      <button class="btn-logout" type="button" onclick="logoutApp()">Keluar</button>
     </div>
-  </div>
-</header>
+    <nav class="sidebar-nav">
+      <p class="sidebar-section-label">Dashboard Pengajian</p>
+      <button type="button" class="sidebar-link active" data-attendance-type="Pengajian Umum"
+        onclick="selectDashboardType('Pengajian Umum')"><i class="fa-solid fa-mosque"></i><span>Pengajian Umum</span></button>
+      <button type="button" class="sidebar-link" data-attendance-type="Pengajian Pengurus"
+        onclick="selectDashboardType('Pengajian Pengurus')"><i class="fa-solid fa-user-tie"></i><span>Pengajian Pengurus</span></button>
+      <button type="button" class="sidebar-link" data-attendance-type="Pengajian Ibu-Ibu Desa"
+        onclick="selectDashboardType('Pengajian Ibu-Ibu Desa')"><i class="fa-solid fa-people-group"></i><span>Pengajian Ibu-Ibu Desa</span></button>
+      <button type="button" class="sidebar-link" data-attendance-type="ASAD Wanita"
+        onclick="selectDashboardType('ASAD Wanita')"><i class="fa-solid fa-person-dress"></i><span>ASAD Wanita</span></button>
+      <p class="sidebar-section-label sidebar-workspace-label">Program Khusus</p>
+      <button type="button" class="sidebar-link" data-attendance-type="Terobosan Pusat"
+        onclick="selectDashboardType('Terobosan Pusat')"><i class="fa-solid fa-star-and-crescent"></i><span>Terobosan Pusat</span></button>
 
-<main class="container hidden" id="app">
+      <p class="sidebar-section-label sidebar-workspace-label">Workspace</p>
+      <a href="#presensi" id="nav-presensi" class="sidebar-link" onclick="showPage('presensi')"><i class="fa-solid fa-clipboard-check"></i><span>Input Presensi</span></a>
+      <a href="#jamaah" class="sidebar-link" onclick="showPage('jamaah')"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
+      <a href="#asisten" class="sidebar-link" onclick="showPage('asisten')"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
+      <a href="#admin" id="nav-admin" class="sidebar-link hidden" onclick="showPage('admin')"><i class="fa-solid fa-gear"></i><span>Pengaturan</span></a>
+    </nav>
+    <div class="sidebar-footer">
+      <span class="sidebar-footer-mark"><i class="fa-solid fa-leaf"></i></span>
+      <span>Yayasan Baitussalam<br>Huda Mansurin</span>
+      <button class="btn-logout" type="button" onclick="logoutApp()" aria-label="Keluar"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
+    </div>
+  </aside>
+  <div class="workspace-content">
+    <header class="workspace-topbar" id="main-header">
+      <div><span class="workspace-topbar-kicker">Ruang kerja</span><strong id="workspace-page-title">Dashboard</strong></div>
+      <span class="workspace-topbar-date"><i class="fa-regular fa-calendar"></i> Rekap kehadiran</span>
+    </header>
 
 <!-- DASHBOARD -->
 <section id="page-dashboard" class="page">
@@ -60,8 +83,8 @@
   <div class="dashboard-heading">
     <div>
       <p class="dashboard-eyebrow">Ringkasan aktivitas</p>
-      <h1>Dashboard</h1>
-      <span class="subtitle">Pantau kehadiran jamaah dan perkembangan setiap kelompok.</span>
+      <h1 id="dashboard-title">Pengajian Umum</h1>
+      <span class="subtitle">Pantau kehadiran peserta dan perkembangan setiap kelompok.</span>
     </div>
   </div>
 
@@ -129,20 +152,20 @@
   <section class="chart-panel dashboard-panel zero-attendance-panel" aria-labelledby="zero-attendance-title">
     <div class="chart-heading">
       <div>
-        <h2 id="zero-attendance-title">Jamaah tanpa kehadiran</h2>
-        <span>Jamaah dengan tingkat kehadiran 0% pada periode terpilih</span>
+        <h2 id="zero-attendance-title">Peserta tanpa kehadiran</h2>
+        <span>Peserta dengan tingkat kehadiran 0% pada periode terpilih</span>
       </div>
       <span id="zero-attendance-count" class="table-count"></span>
     </div>
     <div class="table-scroll">
       <table class="data-table dashboard-zero-table">
-        <thead><tr><th>Nama jamaah</th><th>Kelompok</th><th>Persentase kehadiran</th></tr></thead>
+        <thead><tr><th>Nama peserta</th><th>Kelompok</th><th>Persentase kehadiran</th></tr></thead>
         <tbody id="zero-attendance-list"></tbody>
       </table>
     </div>
   </section>
 
-  <p class="section-help dashboard-note">Pada pertemuan yang memiliki catatan di suatu kelompok, jamaah yang belum diinput otomatis dihitung Alpha. Total pertemuan dihitung per kelompok dan tanggal acara.</p>
+  <p class="section-help dashboard-note">Pada pertemuan yang memiliki catatan di suatu kelompok, peserta yang belum diinput otomatis dihitung Alpha.</p>
   </div>
 
   <dialog id="dashboard-detail-dialog" class="dashboard-detail-dialog" aria-labelledby="dashboard-detail-title">
@@ -175,7 +198,10 @@
       <div id="attendance-type-row" class="form-row">
         <label>Jenis Pengajian
           <select id="p-jenis-pengajian" onchange="attendanceTypeChanged()">
-            <option>Pengajian Rutin</option>
+            <option>Pengajian Umum</option>
+            <option>Pengajian Pengurus</option>
+            <option>Pengajian Ibu-Ibu Desa</option>
+            <option>ASAD Wanita</option>
             <option>Terobosan Pusat</option>
           </select>
         </label>
@@ -276,6 +302,14 @@
           <option value="">Semua</option>
           <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
           <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+        </select>
+      </label>
+      <label>Jenis Pengajian:
+        <select id="r-jenis" onchange="renderRiwayat()">
+          <option value="">Semua jenis</option>
+          <option>Pengajian Umum</option><option>Pengajian Pengurus</option>
+          <option>Pengajian Ibu-Ibu Desa</option><option>ASAD Wanita</option>
+          <option>Terobosan Pusat</option>
         </select>
       </label>
       <button class="btn-secondary" onclick="exportRiwayat()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
@@ -450,6 +484,7 @@
   </div>
 </section>
 
+  </div>
 </main>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>

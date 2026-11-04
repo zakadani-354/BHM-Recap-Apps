@@ -9,7 +9,15 @@ const GROUPS = [
   "Baitul Makmur"
 ];
 const TEROBOSAN_TYPE = "Terobosan Pusat";
-const DEFAULT_ATTENDANCE_TYPE = "Pengajian Rutin";
+const LEGACY_ATTENDANCE_TYPE = "Pengajian Rutin";
+const DEFAULT_ATTENDANCE_TYPE = "Pengajian Umum";
+const ATTENDANCE_TYPES = [
+  DEFAULT_ATTENDANCE_TYPE,
+  "Pengajian Pengurus",
+  "Pengajian Ibu-Ibu Desa",
+  "ASAD Wanita"
+];
+let currentDashboardType = DEFAULT_ATTENDANCE_TYPE;
 const STORAGE_KEYS = {
   attendance: "bhm-recap-attendance",
   members: "bhm-recap-members",
@@ -21,7 +29,17 @@ const DEFAULT_ACCOUNTS = {
   pengurus: { password: "pengurus123", role: "pengurus" }
 };
 
-let presensiData = readArray(STORAGE_KEYS.attendance);
+function normalizeAttendanceType(value) {
+  if (!value || value === LEGACY_ATTENDANCE_TYPE) return DEFAULT_ATTENDANCE_TYPE;
+  return String(value);
+}
+
+function dashboardAttendanceType(record) {
+  return normalizeAttendanceType(record.jenisPengajian);
+}
+
+let presensiData = readArray(STORAGE_KEYS.attendance)
+  .map((record) => ({ ...record, jenisPengajian: normalizeAttendanceType(record.jenisPengajian) }));
 const savedMembers = readArray(STORAGE_KEYS.members);
 const memberIds = new Set();
 let jamaahData = savedMembers.map((member) => {
@@ -192,7 +210,10 @@ function cacheSharedState(state) {
     throw new Error("Data bersama dari server tidak memiliki format yang valid.");
   }
   jamaahData = state.members;
-  presensiData = state.attendance;
+  presensiData = state.attendance.map((record) => ({
+    ...record,
+    jenisPengajian: normalizeAttendanceType(record.jenisPengajian)
+  }));
   sharedDataRevision = Number(state.revision || 0);
   sharedTerobosanSummary = Array.isArray(state.terobosanSummary) ? state.terobosanSummary : [];
   localStorage.setItem(STORAGE_KEYS.members, JSON.stringify(jamaahData));
@@ -297,13 +318,49 @@ function showPage(id) {
   }
   document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
   target.classList.remove("hidden");
-  document.querySelectorAll(".nav-link").forEach((link) => {
+  document.querySelectorAll(".sidebar-link[href]").forEach((link) => {
     link.classList.toggle("active", link.getAttribute("href") === `#${id}`);
   });
+  const pageTitles = {
+    dashboard: currentDashboardType,
+    presensi: "Input Presensi",
+    jamaah: "Data Jamaah",
+    asisten: "Asisten AI",
+    admin: "Pengaturan"
+  };
+  document.getElementById("workspace-page-title").textContent = pageTitles[id] || "BHM Recap";
+  updateDashboardTypeNavigation();
   updateActiveSession({ page: id });
   window.scrollTo(0, 0);
   if (id === "presensi") renderRiwayat();
   if (id === "jamaah") renderJamaah();
+}
+
+function updateDashboardTypeNavigation() {
+  document.querySelectorAll("[data-attendance-type]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.attendanceType === currentDashboardType);
+  });
+}
+
+function selectDashboardType(type) {
+  if (!ATTENDANCE_TYPES.includes(type) && type !== TEROBOSAN_TYPE) {
+    throw new Error(`Jenis pengajian "${type}" tidak dikenal.`);
+  }
+  if (window.currentRole === "presensi") {
+    showPage("presensi");
+    return;
+  }
+  currentDashboardType = type;
+  const typeSelect = document.getElementById("p-jenis-pengajian");
+  typeSelect.value = type;
+  document.getElementById("r-jenis").value = type;
+  attendanceTypeChanged();
+  document.getElementById("workspace-page-title").textContent = type;
+  updateDashboardTypeNavigation();
+  updateActiveSession({ attendanceType: currentDashboardType });
+  showPage("dashboard");
+  renderDashboard();
+  renderRiwayat();
 }
 
 function switchTab(tab) {
@@ -366,14 +423,16 @@ function updateActiveSession(updates) {
   sessionStorage.setItem(SESSION_KEY, JSON.stringify({ ...activeSession, ...updates }));
 }
 
-function openApp(username, role, page = "dashboard", presensiTab = "input", jamaahTab = "satuan", attendanceMode = "satuan") {
+function openApp(username, role, page = "dashboard", presensiTab = "input", jamaahTab = "satuan", attendanceMode = "satuan", attendanceType = DEFAULT_ATTENDANCE_TYPE) {
   window.currentRole = role;
+  currentDashboardType = ATTENDANCE_TYPES.includes(attendanceType) || attendanceType === TEROBOSAN_TYPE
+    ? attendanceType
+    : DEFAULT_ATTENDANCE_TYPE;
   document.getElementById("view-login").classList.add("hidden");
-  document.getElementById("main-header").style.display = "";
   document.getElementById("app").classList.remove("hidden");
   document.getElementById("current-user").textContent =
     `${username} · ${role === "admin" ? "Admin" : role === "presensi" ? "Pengisi Presensi" : "Pengurus"}`;
-  document.querySelectorAll(".nav-link").forEach((link) => {
+  document.querySelectorAll(".sidebar-link").forEach((link) => {
     link.classList.toggle("hidden", role === "presensi" && link.id !== "nav-presensi");
   });
   document.getElementById("nav-admin").classList.toggle("hidden", role !== "admin");
@@ -399,6 +458,14 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   attendanceNameSelect.required = !isAttendanceOnly;
   attendanceNameInput.value = "";
   attendanceNameSelect.value = "";
+  document.getElementById("p-jenis-pengajian").value =
+    isAttendanceOnly ? TEROBOSAN_TYPE : currentDashboardType;
+  document.getElementById("r-jenis").value = currentDashboardType;
+  attendanceTypeChanged();
+  updateDashboardTypeNavigation();
+  document.getElementById("dashboard-title").textContent = currentDashboardType;
+  document.getElementById("workspace-page-title").textContent =
+    page === "dashboard" ? currentDashboardType : ({ presensi: "Input Presensi", jamaah: "Data Jamaah", asisten: "Asisten AI", admin: "Pengaturan" }[page] || "Dashboard");
   updateAttendanceMemberOptions();
   document.getElementById("presensi-heading").classList.toggle("hidden", isAttendanceOnly);
   document.querySelector("#page-presensi .tabs").classList.toggle("hidden", isAttendanceOnly);
@@ -408,6 +475,7 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   document.getElementById("barcode-scan-section").classList.toggle("hidden", isAttendanceOnly);
   if (isAttendanceOnly) {
     document.getElementById("p-jenis-pengajian").value = TEROBOSAN_TYPE;
+    currentDashboardType = TEROBOSAN_TYPE;
     attendanceTypeChanged();
   }
   document.querySelector("#page-jamaah .tabs").classList.toggle("hidden", !isAdmin);
@@ -465,7 +533,8 @@ async function restoreActiveSession() {
         activeSession.page || "dashboard",
         activeSession.presensiTab || "input",
         activeSession.jamaahTab || "satuan",
-        activeSession.attendanceMode || "satuan"
+        activeSession.attendanceMode || "satuan",
+        activeSession.attendanceType || DEFAULT_ATTENDANCE_TYPE
       );
     } catch (error) {
       sharedSyncEnabled = false;
@@ -491,7 +560,8 @@ async function restoreActiveSession() {
     activeSession.page || "dashboard",
     activeSession.presensiTab || "input",
     activeSession.jamaahTab || "satuan",
-    activeSession.attendanceMode || "satuan"
+    activeSession.attendanceMode || "satuan",
+    activeSession.attendanceType || DEFAULT_ATTENDANCE_TYPE
   );
 }
 
@@ -525,7 +595,8 @@ function finishLogin(username, role, shared) {
     page: "dashboard",
     presensiTab: "input",
     jamaahTab: "satuan",
-    attendanceMode: "satuan"
+    attendanceMode: "satuan",
+    attendanceType: DEFAULT_ATTENDANCE_TYPE
   }));
   openApp(username, role);
 }
@@ -570,7 +641,6 @@ async function logoutApp() {
   window.currentRole = null;
   document.getElementById("pass").value = "";
   document.getElementById("app").classList.add("hidden");
-  document.getElementById("main-header").style.display = "none";
   document.getElementById("view-login").classList.remove("hidden");
   document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
   document.getElementById("page-dashboard").classList.remove("hidden");
@@ -598,10 +668,8 @@ function createDashboardMemberLookup() {
     if (!byId.has(member.id)) byId.set(member.id, member);
     const nameKey = `${member.nama.toLowerCase()}\u0000${member.kelompok}`;
     if (!byNameAndGroup.has(nameKey)) byNameAndGroup.set(nameKey, member);
-    if (member.peran.toLowerCase() === "jamaah") {
-      if (!membersByGroup.has(member.kelompok)) membersByGroup.set(member.kelompok, []);
-      membersByGroup.get(member.kelompok).push(member);
-    }
+    if (!membersByGroup.has(member.kelompok)) membersByGroup.set(member.kelompok, []);
+    membersByGroup.get(member.kelompok).push(member);
   });
   return {
     membersByGroup,
@@ -612,8 +680,8 @@ function createDashboardMemberLookup() {
   };
 }
 
-function isDashboardJamaahRecord(record, memberLookup) {
-  return memberLookup.find(record)?.peran?.toLowerCase() === "jamaah";
+function isDashboardMemberRecord(record, memberLookup) {
+  return Boolean(memberLookup.find(record));
 }
 
 function isFridayAttendance(record) {
@@ -622,13 +690,15 @@ function isFridayAttendance(record) {
 }
 
 function dashboardMeetingDates(records) {
-  return new Set(records.filter(isFridayAttendance).map((record) => record.tanggal));
+  return new Set(records
+    .filter((record) => currentDashboardType === TEROBOSAN_TYPE || isFridayAttendance(record))
+    .map((record) => record.tanggal));
 }
 
 function countDistinctPresentAttendances(records, memberLookup) {
   const attendances = new Set();
   records.forEach((record) => {
-    if (record.status !== "Hadir" || !isDashboardJamaahRecord(record, memberLookup)) return;
+    if (record.status !== "Hadir" || !isDashboardMemberRecord(record, memberLookup)) return;
     const member = memberLookup.find(record);
     if (member) attendances.add(`${member.id}\u0000${record.tanggal}`);
   });
@@ -637,7 +707,8 @@ function countDistinctPresentAttendances(records, memberLookup) {
 
 function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLookup) {
   const records = presensiData.filter((record) => {
-    if (!isFridayAttendance(record)) return false;
+    if (dashboardAttendanceType(record) !== currentDashboardType) return false;
+    if (currentDashboardType !== TEROBOSAN_TYPE && !isFridayAttendance(record)) return false;
     const recordMonth = record.tanggal.slice(0, 7);
     return (!startMonth || recordMonth >= startMonth)
       && (!endMonth || recordMonth <= endMonth)
@@ -655,7 +726,7 @@ function dashboardRecordsForPeriod(startMonth, endMonth, selectedGroup, memberLo
       });
     }
     const member = memberLookup.find(record);
-    if (member?.peran?.toLowerCase() === "jamaah") {
+    if (member) {
       sessionMembers.get(sessionKey).attendedMemberIds.add(member.id);
     }
   });
@@ -700,7 +771,7 @@ function selectedPeriodRecords() {
   const summarizeGroups = (records, groupNames) => {
     const groupRecords = new Map();
     records.forEach((record) => {
-      if (!isDashboardJamaahRecord(record, memberLookup)) return;
+      if (!isDashboardMemberRecord(record, memberLookup)) return;
       if (!groupRecords.has(record.kelompok)) {
         groupRecords.set(record.kelompok, { records: [], dates: new Set() });
       }
@@ -804,7 +875,7 @@ function dashboardExportFilename(extension) {
   const months = mode === "month"
     ? [document.getElementById("f-bulan").value]
     : [document.getElementById("f-bulan-mulai").value, document.getElementById("f-bulan-sampai").value];
-  const suffix = [group, ...months.filter(Boolean)]
+  const suffix = [currentDashboardType, group, ...months.filter(Boolean)]
     .filter(Boolean)
     .join("-")
     .replace(/[^\w-]+/g, "-")
@@ -897,7 +968,7 @@ function renderStatusDonut(records, meetingCount, showMeetings, memberLookup) {
     { label: "Alpa", display: "Alpha", color: "#ef4444" }
   ];
   const counts = new Map(statuses.map((item) => [item.label, 0]));
-  records.filter((record) => isDashboardJamaahRecord(record, memberLookup)).forEach((record) => {
+  records.filter((record) => isDashboardMemberRecord(record, memberLookup)).forEach((record) => {
     if (counts.has(record.status)) counts.set(record.status, counts.get(record.status) + 1);
   });
   const total = statuses.reduce((sum, item) => sum + counts.get(item.label), 0);
@@ -933,6 +1004,8 @@ function renderStatusDonut(records, meetingCount, showMeetings, memberLookup) {
 
 function renderAttendanceTrend(selectedGroup, memberLookup) {
   const monthKeys = [...new Set(presensiData
+    .filter((record) => dashboardAttendanceType(record) === currentDashboardType)
+    .filter((record) => currentDashboardType === TEROBOSAN_TYPE || isFridayAttendance(record))
     .filter((record) => record.tanggal?.match(/^\d{4}-\d{2}-\d{2}$/))
     .filter((record) => (!selectedGroup || record.kelompok === selectedGroup))
     .map((record) => record.tanggal.slice(0, 7)))]
@@ -1003,21 +1076,22 @@ function renderDashboard() {
     selectedGroup,
     memberLookup
   } = selectedPeriodRecords();
+  document.getElementById("dashboard-title").textContent = currentDashboardType;
+  document.getElementById("workspace-page-title").textContent = currentDashboardType;
   const meetingDates = dashboardMeetingDates(allMonthRecords);
   const totalMeetings = meetingDates.size;
   const totalAttendance = countDistinctPresentAttendances(allMonthRecords, memberLookup);
 
   const memberAttendance = new Map();
   allMonthRecords.forEach((record) => {
-    if (record.status !== "Hadir" || !isDashboardJamaahRecord(record, memberLookup)) return;
+    if (record.status !== "Hadir" || !isDashboardMemberRecord(record, memberLookup)) return;
     const member = memberLookup.find(record);
     if (!member) return;
     if (!memberAttendance.has(member.id)) memberAttendance.set(member.id, new Set());
     memberAttendance.get(member.id).add(record.tanggal);
   });
   const eligibleMembers = jamaahData.filter((member) =>
-    member.peran.toLowerCase() === "jamaah"
-      && (!selectedGroup || member.kelompok === selectedGroup));
+    !selectedGroup || member.kelompok === selectedGroup);
   const genderAttendance = { Pria: 0, Wanita: 0 };
   const genderMemberTotals = { Pria: 0, Wanita: 0 };
   const genderCapacity = { Pria: 0, Wanita: 0 };
@@ -1083,14 +1157,14 @@ function renderDashboard() {
   const groupScopeLabel = selectedGroup ? "Kelompok Terpilih" : "Seluruh Kelompok";
 
   document.getElementById("dashboard-cards").innerHTML = [
-    { title: "Jumlah Jamaah", value: eligibleMembers.length, meta: selectedGroup ? "Jamaah di kelompok terpilih" : "Seluruh jamaah terdaftar", type: "count", icon: "fa-users" },
+    { title: "Jumlah Peserta", value: eligibleMembers.length, meta: selectedGroup ? "Peserta terdaftar di kelompok ini" : "Seluruh peserta terdaftar", type: "count", icon: "fa-users" },
     { title: "Total Pertemuan", value: totalMeetings, meta: periodLabel, type: "count", icon: "fa-calendar-check" },
     { title: "Tingkat Kehadiran", value: formatPercentage(attendanceRate), meta: groupScopeLabel, type: "percent", icon: "fa-chart-line" },
-    { title: "Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} jamaah wanita`, type: "percent", icon: "fa-person-dress" },
-    { title: "Kehadiran Laki-laki", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} jamaah laki-laki`, type: "percent", icon: "fa-person" },
-    { title: "Rerata per Pertemuan", value: `${averageAttendance.toLocaleString("id-ID", { maximumFractionDigits: 1 })} orang`, meta: `${formatPercentage(attendanceRate)} dari kapasitas jamaah`, type: "average", icon: "fa-people-group" },
-    { title: "Kehadiran 0%", value: zeroAttendanceCount, meta: "Jamaah tanpa kehadiran pada periode ini", type: "zero", icon: "fa-user-slash" },
-    { title: "Kehadiran 100%", value: fullAttendanceCount, meta: "Jamaah hadir di setiap pertemuan", type: "full", icon: "fa-user-check" }
+    { title: "Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} peserta wanita`, type: "percent", icon: "fa-person-dress" },
+    { title: "Kehadiran Laki-laki", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} peserta laki-laki`, type: "percent", icon: "fa-person" },
+    { title: "Rerata per Pertemuan", value: `${averageAttendance.toLocaleString("id-ID", { maximumFractionDigits: 1 })} orang`, meta: `${formatPercentage(attendanceRate)} dari kapasitas peserta`, type: "average", icon: "fa-people-group" },
+    { title: "Kehadiran 0%", value: zeroAttendanceCount, meta: "Peserta tanpa kehadiran pada periode ini", type: "zero", icon: "fa-user-slash" },
+    { title: "Kehadiran 100%", value: fullAttendanceCount, meta: "Peserta hadir di setiap pertemuan", type: "full", icon: "fa-user-check" }
   ].map(({ title, value, meta, type, icon }) => `
     <article class="card dashboard-kpi-card dashboard-kpi-${type}">
       <span class="dashboard-kpi-icon" aria-hidden="true"><i class="fa-solid ${icon}"></i></span>
@@ -1101,7 +1175,11 @@ function renderDashboard() {
     ? `<button class="btn-secondary dashboard-detail-button" type="button" onclick="${type === "zero" ? "scrollToZeroAttendance()" : `showDashboardDetails('${type}')`}" ${value ? "" : "disabled"}>Rincian</button>`
     : ""}
     </article>`).join("");
-  renderTerobosanSummary();
+  if (currentDashboardType === TEROBOSAN_TYPE) {
+    renderTerobosanSummary();
+  } else {
+    document.getElementById("terobosan-summary").innerHTML = "";
+  }
 
   document.getElementById("attendance-chart").innerHTML = chartGroups.length
     ? chartGroups.map(({ group, records, percentage }) => {
@@ -1130,7 +1208,10 @@ function renderDashboard() {
   document.getElementById("zero-attendance-list").innerHTML = zeroAttendanceMembers.length
     ? zeroAttendanceMembers.map(({ name, group }) => `
       <tr><td>${escapeHtml(name)}</td><td>${escapeHtml(group)}</td><td>0%</td></tr>`).join("")
-    : '<tr><td colspan="3" class="dashboard-empty-cell">Tidak ada jamaah dengan kehadiran 0% pada periode ini.</td></tr>';
+    : '<tr><td colspan="3" class="dashboard-empty-cell">Tidak ada peserta dengan kehadiran 0% pada periode ini.</td></tr>';
+  document.querySelector(".dashboard-note").textContent = currentDashboardType === TEROBOSAN_TYPE
+    ? "Terobosan Pusat dihitung berdasarkan tanggal acara yang memiliki presensi. Peserta yang belum diinput pada kelompok acara otomatis dihitung Alpha."
+    : "Pertemuan dihitung berdasarkan tanggal Jumat yang memiliki presensi untuk jenis pengajian terpilih. Jamaah yang belum diinput otomatis dihitung Alpha.";
 }
 
 function terobosanDatesForYear(year, records = presensiData) {
@@ -1209,7 +1290,18 @@ function renderTerobosanSummary() {
 }
 
 function attendanceTypeChanged() {
-  const isTerobosan = document.getElementById("p-jenis-pengajian").value === TEROBOSAN_TYPE;
+  const selectedType = document.getElementById("p-jenis-pengajian").value;
+  currentDashboardType = ATTENDANCE_TYPES.includes(selectedType) || selectedType === TEROBOSAN_TYPE
+    ? selectedType
+    : DEFAULT_ATTENDANCE_TYPE;
+  updateDashboardTypeNavigation();
+  document.getElementById("dashboard-title").textContent = currentDashboardType;
+  document.getElementById("r-jenis").value = currentDashboardType;
+  if (document.getElementById("workspace-page-title")) {
+    document.getElementById("workspace-page-title").textContent = currentDashboardType;
+  }
+  updateActiveSession({ attendanceType: currentDashboardType });
+  const isTerobosan = currentDashboardType === TEROBOSAN_TYPE;
   const dateInputs = [
     document.getElementById("p-tanggal"),
     document.getElementById("batch-date")
@@ -1290,9 +1382,11 @@ function updateTerobosanAttendanceCounts() {
 
 function renderRiwayat() {
   const group = document.getElementById("r-kelompok").value;
+  const type = document.getElementById("r-jenis").value;
   const records = presensiData
     .map((record, index) => ({ record, index }))
-    .filter(({ record }) => !group || record.kelompok === group)
+    .filter(({ record }) => (!group || record.kelompok === group)
+      && (!type || dashboardAttendanceType(record) === type))
     .sort((a, b) => b.record.tanggal.localeCompare(a.record.tanggal)
       || a.record.nama.localeCompare(b.record.nama));
   document.getElementById("riwayat-table").innerHTML = records.map(({ record, index }) => `
@@ -1301,7 +1395,7 @@ function renderRiwayat() {
         aria-label="Pilih presensi ${escapeHtml(record.nama)} tanggal ${escapeHtml(record.tanggal)}"
         onchange="updateAttendanceSelection()"></td>
       <td>${escapeHtml(record.tanggal)}</td>
-      <td>${escapeHtml(record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE)}</td>
+      <td>${escapeHtml(dashboardAttendanceType(record))}</td>
       <td>${escapeHtml(record.nama)}</td>
       <td>${escapeHtml(record.kelompok)}</td>
       <td>${escapeHtml(record.status)}</td>
@@ -1980,8 +2074,8 @@ function hasAttendance(record, pending = []) {
     const sameMemberId = record.memberId && item.memberId && item.memberId === record.memberId;
     const sameNameAndGroup = normalizeNameForMatch(item.nama) === recordName
       && normalizeGroupForMatch(item.kelompok) === normalizeGroupForMatch(record.kelompok);
-    const recordType = record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE;
-    const itemType = item.jenisPengajian || DEFAULT_ATTENDANCE_TYPE;
+    const recordType = dashboardAttendanceType(record);
+    const itemType = dashboardAttendanceType(item);
     return (sameMemberId || sameNameAndGroup)
       && item.tanggal === record.tanggal
       && itemType === recordType;
@@ -2251,20 +2345,23 @@ function addBatchPresensi() {
 
 function exportRiwayat() {
   const group = document.getElementById("r-kelompok").value;
-  const records = presensiData.filter((record) => !group || record.kelompok === group);
+  const type = document.getElementById("r-jenis").value;
+  const records = presensiData.filter((record) => (!group || record.kelompok === group)
+    && (!type || dashboardAttendanceType(record) === type));
   if (!records.length) {
     alert("Tidak ada riwayat yang dapat diekspor.");
     return;
   }
   const quote = (value) => `"${String(value).replace(/"/g, '""')}"`;
   const csv = [["Tanggal", "Jenis Pengajian", "Nama", "Kelompok", "Status", "Metode"], ...records.map((record) => [
-    record.tanggal, record.jenisPengajian || DEFAULT_ATTENDANCE_TYPE,
+    record.tanggal, dashboardAttendanceType(record),
     record.nama, record.kelompok, record.status, record.metode
   ])].map((row) => row.map(quote).join(",")).join("\r\n");
   const url = URL.createObjectURL(new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = `riwayat-presensi${group ? `-${group.replace(/\s+/g, "-").toLowerCase()}` : ""}.csv`;
+  const typeSuffix = type ? `-${type.replace(/[^\w-]+/g, "-").toLowerCase()}` : "";
+  link.download = `riwayat-presensi${typeSuffix}${group ? `-${group.replace(/\s+/g, "-").toLowerCase()}` : ""}.csv`;
   link.click();
   URL.revokeObjectURL(url);
 }
@@ -2274,6 +2371,7 @@ function askAssistant() {
   const group = GROUPS.find((item) => question.includes(item.toLowerCase()));
   const month = currentMonth();
   const records = presensiData.filter((record) => record.tanggal.startsWith(month)
+    && dashboardAttendanceType(record) === currentDashboardType
     && (!group || record.kelompok === group));
   const hadir = records.filter((record) => record.status === "Hadir").length;
   const izin = records.filter((record) => record.status === "Izin").length;

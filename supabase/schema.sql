@@ -22,6 +22,23 @@ create table if not exists public.bhm_app_accounts (
   password_hash text not null
 );
 
+update public.bhm_app_state as state
+set attendance = coalesce((
+  select jsonb_agg(
+    case
+      when coalesce(entry->>'jenisPengajian', 'Pengajian Rutin') = 'Pengajian Rutin'
+        then jsonb_set(entry, '{jenisPengajian}', to_jsonb('Pengajian Umum'::text), true)
+      else entry
+    end
+  )
+  from jsonb_array_elements(state.attendance) as records(entry)
+), '[]'::jsonb)
+where exists (
+  select 1
+  from jsonb_array_elements(state.attendance) as records(entry)
+  where coalesce(entry->>'jenisPengajian', 'Pengajian Rutin') = 'Pengajian Rutin'
+);
+
 alter table public.bhm_app_state enable row level security;
 alter table public.bhm_terobosan_events enable row level security;
 alter table public.bhm_app_accounts enable row level security;
@@ -251,7 +268,14 @@ begin
       or entry->>'status' is null
       or entry->>'status' not in ('Hadir', 'Izin', 'Sakit', 'Alpa')
       or coalesce(entry->>'jenisPengajian', 'Pengajian Rutin')
-        not in ('Pengajian Rutin', 'Terobosan Pusat')
+        not in (
+          'Pengajian Rutin',
+          'Pengajian Umum',
+          'Pengajian Pengurus',
+          'Pengajian Ibu-Ibu Desa',
+          'ASAD Wanita',
+          'Terobosan Pusat'
+        )
       or entry->>'metode' is null
       or entry->>'metode' not in ('Satuan', 'Barcode', 'Massal')
       or not exists (
