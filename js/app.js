@@ -1204,14 +1204,21 @@ function renderDashboard() {
     }
   });
   const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [], full: [] }]));
+  const meetingDatesByGroup = new Map(GROUPS.map((group) => [
+    group,
+    dashboardMeetingDates(allMonthRecords.filter((record) =>
+      record.kelompok === group && isDashboardMemberRecord(record, memberLookup)))
+  ]));
   eligibleMembers.forEach((member) => {
-    const meetingCount = totalMeetings;
-    if (!meetingCount) return;
-    const rate = (memberAttendance.get(member.id)?.size || 0) / meetingCount;
     const counts = groupAttendanceCounts.get(member.kelompok);
     if (!counts) return;
-    if (rate === 0) counts.zero.push({ name: member.nama, group: member.kelompok });
-    if (rate === 1) counts.full.push(member.nama);
+    const groupMeetingDates = meetingDatesByGroup.get(member.kelompok) || new Set();
+    if (!groupMeetingDates.size) return;
+    const presentDates = memberAttendance.get(member.id) || new Set();
+    const presentMeetings = [...groupMeetingDates]
+      .filter((date) => presentDates.has(date)).length;
+    if (presentMeetings === 0) counts.zero.push({ name: member.nama, group: member.kelompok });
+    if (presentMeetings === groupMeetingDates.size) counts.full.push(member.nama);
   });
   const formatMonth = (month) => {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -1235,8 +1242,11 @@ function renderDashboard() {
   const percentPria = genderCapacity.Pria ? genderAttendance.Pria / genderCapacity.Pria * 100 : 0;
   const percentWanita = genderCapacity.Wanita ? genderAttendance.Wanita / genderCapacity.Wanita * 100 : 0;
   const averageAttendance = totalMeetings ? totalAttendance / totalMeetings : 0;
-  const zeroAttendanceCount = [...groupAttendanceCounts.values()]
-    .reduce((total, counts) => total + counts.zero.length, 0);
+  const zeroAttendanceMembers = [...groupAttendanceCounts.values()]
+    .flatMap((counts) => counts.zero)
+    .sort((first, second) => first.group.localeCompare(second.group, "id")
+      || first.name.localeCompare(second.name, "id"));
+  const zeroAttendanceCount = zeroAttendanceMembers.length;
   const fullAttendanceCount = [...groupAttendanceCounts.values()]
     .reduce((total, counts) => total + counts.full.length, 0);
   dashboardAttendanceDetails = {
@@ -1325,10 +1335,6 @@ function renderDashboard() {
   renderStatusDonut(allMonthRecords, totalMeetings, true, memberLookup);
   renderAttendanceTrend(selectedGroup, memberLookup);
 
-  const zeroAttendanceMembers = [...groupAttendanceCounts.values()]
-    .flatMap((counts) => counts.zero)
-    .sort((first, second) => first.group.localeCompare(second.group, "id")
-      || first.name.localeCompare(second.name, "id"));
   document.getElementById("zero-attendance-count").textContent =
     `${zeroAttendanceMembers.length} jamaah`;
   document.getElementById("zero-attendance-list").innerHTML = zeroAttendanceMembers.length
