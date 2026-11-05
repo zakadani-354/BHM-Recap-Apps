@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="referrer" content="no-referrer">
 <title>BHM Recap Apps</title>
+<script src="https://cdn.tailwindcss.com"></script>
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;700;800&display=swap" rel="stylesheet">
@@ -28,16 +29,15 @@
   </div>
 </section>
 
-<main class="app-shell hidden" id="app">
-  <aside class="app-sidebar" aria-label="Navigasi utama">
+<main class="app-shell hidden min-h-screen gap-5 p-4 lg:gap-6 lg:p-6" id="app">
+  <aside class="app-sidebar rounded-3xl border border-white/60 bg-white/50 shadow-xl backdrop-blur-2xl" aria-label="Navigasi utama">
     <a class="sidebar-brand" href="#dashboard" onclick="selectDashboardType('Pengajian Umum')">
       <img class="brand-logo" src="logo.png" alt="">
       <span><strong>BHM Recap</strong><small>Presensi Jamaah</small></span>
     </a>
     <div class="sidebar-account">
-      <span class="sidebar-avatar"><i class="fa-solid fa-user"></i></span>
-      <span id="current-user"></span>
-      <span id="sync-status" class="sync-status" role="status"></span>
+      <span class="sidebar-avatar"><i class="fa-solid fa-cloud"></i></span>
+      <span class="sync-copy"><strong>Status Sinkronisasi</strong><span id="sync-status" class="sync-status" role="status"></span></span>
     </div>
     <nav class="sidebar-nav">
       <p class="sidebar-section-label">Dashboard Pengajian</p>
@@ -67,10 +67,23 @@
       <button class="btn-logout" type="button" onclick="logoutApp()" aria-label="Keluar"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
     </div>
   </aside>
-  <div class="workspace-content">
+  <div class="workspace-content rounded-3xl border border-white/70 bg-white/55 shadow-2xl backdrop-blur-2xl">
     <header class="workspace-topbar" id="main-header">
-      <div><span class="workspace-topbar-kicker">Ruang kerja</span><strong id="workspace-page-title">Dashboard</strong></div>
-      <span class="workspace-topbar-date"><i class="fa-regular fa-calendar"></i> Rekap kehadiran</span>
+      <div class="topbar-title"><span class="workspace-topbar-kicker">Ruang kerja</span><strong id="workspace-page-title">Dashboard</strong></div>
+      <label class="workspace-search">
+        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
+        <input type="search" aria-label="Cari" placeholder="Cari menu atau data...">
+      </label>
+      <div class="topbar-actions">
+        <button class="notification-button" type="button" aria-label="Notifikasi">
+          <i class="fa-regular fa-bell" aria-hidden="true"></i><span class="notification-dot"></span>
+        </button>
+        <div class="workspace-profile">
+          <span class="profile-avatar"><i class="fa-solid fa-user"></i></span>
+          <span id="current-user"></span>
+        </div>
+        <span class="workspace-topbar-date"><i class="fa-regular fa-calendar"></i> Rekap kehadiran</span>
+      </div>
     </header>
 
 <!-- DASHBOARD -->
