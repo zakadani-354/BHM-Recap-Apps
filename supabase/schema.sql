@@ -67,15 +67,14 @@ end;
 $$;
 
 insert into public.bhm_terobosan_events (event_year, event_date, attendance)
-select extract(year from (entry->>'tanggal')::date)::integer,
-       (entry->>'tanggal')::date,
+select extract(year from min((entry->>'tanggal')::date))::integer,
+       min((entry->>'tanggal')::date),
        jsonb_agg(entry order by entry->>'nama')
 from public.bhm_app_state as state
 cross join lateral jsonb_array_elements(state.attendance) as records(entry)
 where entry->>'jenisPengajian' = 'Terobosan Pusat'
   and entry->>'tanggal' ~ '^\d{4}-\d{2}-\d{2}$'
-group by extract(year from (entry->>'tanggal')::date)::integer,
-         (entry->>'tanggal')::date
+group by extract(year from (entry->>'tanggal')::date)::integer
 on conflict (event_year) do nothing;
 
 update public.bhm_app_state as state
@@ -200,13 +199,12 @@ begin
     delete from public.bhm_terobosan_events;
 
     insert into public.bhm_terobosan_events (event_year, event_date, attendance)
-    select extract(year from (entry->>'tanggal')::date)::integer,
-           (entry->>'tanggal')::date,
+    select extract(year from min((entry->>'tanggal')::date))::integer,
+           min((entry->>'tanggal')::date),
            jsonb_agg(entry order by entry->>'nama')
     from jsonb_array_elements(p_data) as records(entry)
     where entry->>'jenisPengajian' = 'Terobosan Pusat'
-    group by extract(year from (entry->>'tanggal')::date)::integer,
-             (entry->>'tanggal')::date;
+    group by extract(year from (entry->>'tanggal')::date)::integer;
 
     update public.bhm_app_state
     set attendance = coalesce((

@@ -138,6 +138,8 @@ async function supabaseRequest(config, path, options = {}) {
       )
         ? SUPABASE_VALIDATION_MESSAGES[diagnostic.message]
         : "Data ditolak oleh aturan validasi Supabase (P0001). Periksa log Function di Vercel untuk detailnya.";
+    } else if (diagnostic.code === "21000") {
+      message = "Supabase menemukan beberapa baris yang bertabrakan saat menyimpan riwayat. Jalankan ulang supabase/schema.sql di SQL Editor, lalu coba lagi.";
     } else if (response.status === 404 && diagnostic.response === "Non-JSON error response") {
       message = "Supabase mengembalikan halaman 404, bukan respons API. Pastikan SUPABASE_URL di Vercel hanya berisi Project URL dasar, contoh https://<project-ref>.supabase.co, tanpa /rest/v1.";
     }

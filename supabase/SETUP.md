@@ -82,6 +82,9 @@ code, but never logs the API key or login password.
   If it mentions an invalid member or pengajian category after adding the new
   categories, run the complete `schema.sql` in the matching Supabase project,
   then redeploy the latest app in Vercel.
+- `21000`: the database found multiple rows for one operation. Run the complete
+  `schema.sql` in the matching Supabase project; Terobosan Pusat events are
+  rebuilt as one row per year.
 - Any other status or code: check that `SUPABASE_URL` is the Project URL for the
   same Supabase project where `schema.sql` was run.
 - A plain HTTP 404 without a Supabase error code usually means `SUPABASE_URL`
