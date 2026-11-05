@@ -1203,6 +1203,11 @@ function renderDashboard() {
       genderAttendance[member.jenisKelamin] += memberAttendance.get(member.id)?.size || 0;
     }
   });
+  const zeroRateGroups = new Set(chartGroups
+    .filter(({ group, records, rate }) => records.length > 0
+      && rate === 0
+      && (!selectedGroup || group === selectedGroup))
+    .map(({ group }) => group));
   const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [], full: [] }]));
   const meetingDatesByGroup = new Map(GROUPS.map((group) => [
     group,
@@ -1217,7 +1222,9 @@ function renderDashboard() {
     const presentDates = memberAttendance.get(member.id) || new Set();
     const presentMeetings = [...groupMeetingDates]
       .filter((date) => presentDates.has(date)).length;
-    if (presentMeetings === 0) counts.zero.push({ name: member.nama, group: member.kelompok });
+    if (presentMeetings === 0 && zeroRateGroups.has(member.kelompok)) {
+      counts.zero.push({ name: member.nama, group: member.kelompok });
+    }
     if (presentMeetings === groupMeetingDates.size) counts.full.push(member.nama);
   });
   const formatMonth = (month) => {
