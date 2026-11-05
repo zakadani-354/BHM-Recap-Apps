@@ -11,13 +11,14 @@ const GROUPS = [
 const TEROBOSAN_TYPE = "Terobosan Pusat";
 const LEGACY_ATTENDANCE_TYPE = "Pengajian Rutin";
 const DEFAULT_ATTENDANCE_TYPE = "Pengajian Umum";
-const MEMBER_CATEGORIES = ["Bapak", "Ibu", "Generus"];
+const MEMBER_CATEGORIES = ["Bapak", "Ibu", "Generus", "Lansia"];
 const UNCLASSIFIED_MEMBER_CATEGORY = "Belum ditentukan";
 const ATTENDANCE_TYPES = [
   DEFAULT_ATTENDANCE_TYPE,
   "Pengajian Pengurus",
   "Pengajian Ibu-Ibu Desa",
-  "ASAD Wanita"
+  "ASAD Wanita",
+  "Pengajian Lansia"
 ];
 let currentDashboardType = DEFAULT_ATTENDANCE_TYPE;
 let activeSidebarSelection = "";
@@ -95,8 +96,8 @@ function normalizeMemberCategory(value, gender = null) {
 }
 
 function memberCategoriesForGender(gender) {
-  if (gender === "Pria") return ["Bapak", "Generus"];
-  if (gender === "Wanita") return ["Ibu", "Generus"];
+  if (gender === "Pria") return ["Bapak", "Generus", "Lansia"];
+  if (gender === "Wanita") return ["Ibu", "Generus", "Lansia"];
   return [];
 }
 
@@ -761,6 +762,7 @@ function isEligibleDashboardMember(member) {
   if (currentDashboardType === "ASAD Wanita")
     return member.jenisKelamin === "Wanita"
       && ["Ibu", "Generus"].includes(member.kategori);
+  if (currentDashboardType === "Pengajian Lansia") return member.kategori === "Lansia";
   return true;
 }
 
@@ -1274,6 +1276,15 @@ function renderDashboard() {
       ...standardCards.slice(1, 3),
       standardCards[5]
     ];
+  } else if (currentDashboardType === "Pengajian Lansia") {
+    dashboardCards = [
+      { title: "Jumlah Peserta", value: eligibleMembers.length, meta: selectedGroup ? "Peserta Lansia terdaftar di kelompok ini" : "Seluruh peserta Lansia terdaftar", type: "count", icon: "fa-users" },
+      ...standardCards.slice(1, 3),
+      { title: "Tingkat Kehadiran Wanita Lansia", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} peserta wanita Lansia`, type: "percent", icon: "fa-person-dress" },
+      { title: "Tingkat Kehadiran Laki-laki Lansia", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} peserta laki-laki Lansia`, type: "percent", icon: "fa-person" },
+      standardCards[5],
+      standardCards[6]
+    ];
   }
   document.getElementById("dashboard-cards").innerHTML = dashboardCards.map(({ title, value, meta, type, icon }) => `
     <article class="card dashboard-kpi-card dashboard-kpi-${type}">
@@ -1325,7 +1336,9 @@ function renderDashboard() {
     : '<tr><td colspan="3" class="dashboard-empty-cell">Tidak ada peserta dengan kehadiran 0% pada periode ini.</td></tr>';
   document.querySelector(".dashboard-note").textContent = currentDashboardType === TEROBOSAN_TYPE
     ? "Terobosan Pusat dihitung berdasarkan tanggal acara yang memiliki presensi. Peserta yang belum diinput pada kelompok acara otomatis dihitung Alpha."
-    : "Pertemuan dihitung berdasarkan tanggal Jumat yang memiliki presensi untuk jenis pengajian terpilih. Jamaah yang belum diinput otomatis dihitung Alpha.";
+    : currentDashboardType === DEFAULT_ATTENDANCE_TYPE
+      ? "Pertemuan Pengajian Umum dihitung berdasarkan tanggal Jumat yang memiliki presensi. Jamaah yang belum diinput otomatis dihitung Alpha."
+      : "Pertemuan dihitung berdasarkan tanggal yang memiliki presensi untuk jenis pengajian terpilih. Jamaah yang belum diinput otomatis dihitung Alpha.";
 }
 
 function terobosanDatesForYear(year, records = presensiData) {
@@ -1441,6 +1454,8 @@ function attendanceTypeChanged() {
 
   }
   updateTerobosanAttendanceCounts();
+  updateAttendanceMemberOptions();
+  updateAttendanceNameOptions();
 }
 
 function attendanceFiltersChanged() {
@@ -1455,7 +1470,8 @@ function updateAttendanceNameOptions() {
   const options = jamaahData
     .filter((member) => member.kelompok === group
       && (!gender || member.jenisKelamin === gender)
-      && (!role || member.peran === role))
+      && (!role || member.peran === role)
+      && (currentDashboardType !== "Pengajian Lansia" || member.kategori === "Lansia"))
     .sort((first, second) => first.nama.localeCompare(second.nama, "id"))
     .map((member) => `<option value="${escapeHtml(member.nama)}"></option>`)
     .join("");
@@ -1681,7 +1697,8 @@ function updateAttendanceMemberOptions(selectedId = "") {
   const role = document.getElementById("p-peran").value;
   const nameSelect = document.getElementById("p-nama");
   const candidates = jamaahData.filter((member) => member.kelompok === group
-    && member.jenisKelamin === gender && member.peran === role);
+    && member.jenisKelamin === gender && member.peran === role
+    && (currentDashboardType !== "Pengajian Lansia" || member.kategori === "Lansia"));
   nameSelect.innerHTML = `<option value="">${candidates.length ? "Pilih nama..." : "Tidak ada jamaah yang cocok"}</option>`
     + candidates.map((member) => `<option value="${escapeHtml(member.id)}">${escapeHtml(member.nama)}</option>`).join("");
   nameSelect.disabled = window.currentRole === "presensi"
@@ -1874,6 +1891,7 @@ function findBatchMemberMatches(query, group, gender) {
   const normalizedQuery = normalizeNameForMatch(query);
   const candidates = jamaahData.filter((member) => (group === "all" || member.kelompok === group)
     && member.jenisKelamin === gender
+    && (currentDashboardType !== "Pengajian Lansia" || member.kategori === "Lansia")
     && normalizeNameForMatch(member.nama).includes(normalizedQuery));
   const exactMatches = candidates.filter((member) =>
     normalizeNameForMatch(member.nama) === normalizedQuery);
@@ -2038,6 +2056,10 @@ function resolveBatchPresensi(group, gender) {
       status,
       metode: "Massal"
     };
+    if (record.jenisPengajian === "Pengajian Lansia" && member?.kategori !== "Lansia") {
+      reportIssue(`${location}: Pengajian Lansia hanya dapat mencatat jamaah berkategori Lansia.`);
+      return;
+    }
     if (hasAttendance(record, incoming)) {
       reportIssue(`${location}: presensi ${member.nama} tanggal ${date} sudah ada.`);
       return;
@@ -2173,6 +2195,10 @@ function addPresensi() {
     status: document.getElementById("p-status").value,
     metode: window.currentRole === "presensi" ? "Satuan" : document.getElementById("p-metode").value
   };
+  if (record.jenisPengajian === "Pengajian Lansia" && member?.kategori !== "Lansia") {
+    alert("Pengajian Lansia hanya dapat mencatat jamaah berkategori Lansia.");
+    return;
+  }
   if (!record.nama || !GROUPS.includes(record.kelompok) || !record.tanggal
       || !["Pria", "Wanita"].includes(record.jenisKelamin)
       || !["Jamaah", "Pengurus"].includes(role)

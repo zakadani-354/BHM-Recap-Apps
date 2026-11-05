@@ -12,7 +12,7 @@ serverless function alongside the static app.
    full script again so the deployed RPC validation matches the app.
    The updated script migrates legacy `Pengajian Rutin` records to
    `Pengajian Umum` and enables the Pengajian Pengurus, Pengajian Ibu-Ibu Desa,
-   and ASAD Wanita attendance categories.
+   ASAD Wanita, and Pengajian Lansia attendance categories.
 2. In Vercel, add these environment variables under **Project > Settings >
    Environment Variables**. Select every environment where the app is deployed
    (Production, and Preview/Development if you use them), then redeploy:
@@ -39,10 +39,14 @@ copy instead of that device's local copy. Admin accounts can edit member data;
 admin and pengurus accounts can add attendance. Password changes are stored centrally.
 
 Member records include a gender-specific category: male members can be
-`Bapak` or `Generus`, and female members can be `Ibu` or `Generus`.
+`Bapak`, `Generus`, or `Lansia`, and female members can be `Ibu`, `Generus`,
+or `Lansia`.
 `Pengajian Ibu-Ibu Desa` uses registered female `Ibu` members; `ASAD Wanita`
-uses female `Ibu` and `Generus` members. Existing members without a category
-are marked `Belum ditentukan` and excluded from those dashboard totals until
+uses female `Ibu` and `Generus` members; `Pengajian Lansia` uses all registered
+members categorized as `Lansia`. Its dashboard shows attendance rates for
+senior women and men separately, plus the 0% attendance list, without a 100%
+attendance KPI. Existing members without a category are marked
+`Belum ditentukan` and excluded from category-specific dashboard totals until
 an admin classifies them in Data Jamaah. CSV imports can include the columns
 `Nama,Kelompok,Jenis Kelamin,Kategori Jamaah,Peran`; older formats remain
 supported but require category assignment for those dashboards.

@@ -272,6 +272,7 @@ begin
           'Pengajian Pengurus',
           'Pengajian Ibu-Ibu Desa',
           'ASAD Wanita',
+          'Pengajian Lansia',
           'Terobosan Pusat'
         )
       or entry->>'metode' is null
@@ -282,6 +283,10 @@ begin
         where member->>'id' = entry->>'memberId'
           and member->>'nama' = entry->>'nama'
           and member->>'kelompok' = entry->>'kelompok'
+          and (
+            coalesce(entry->>'jenisPengajian', 'Pengajian Rutin') <> 'Pengajian Lansia'
+            or member->>'kategori' = 'Lansia'
+          )
       )
   ) then
     raise exception 'Attendance addition contains an invalid member or record';
@@ -382,6 +387,7 @@ begin
         'Pengajian Pengurus',
         'Pengajian Ibu-Ibu Desa',
         'ASAD Wanita',
+        'Pengajian Lansia',
         'Terobosan Pusat'
       )
   ) then

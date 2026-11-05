@@ -49,6 +49,8 @@
         onclick="selectDashboardType('Pengajian Ibu-Ibu Desa')"><i class="fa-solid fa-people-group"></i><span>Pengajian Ibu-Ibu Desa</span></button>
       <button type="button" class="sidebar-link" data-attendance-type="ASAD Wanita"
         onclick="selectDashboardType('ASAD Wanita')"><i class="fa-solid fa-person-dress"></i><span>ASAD Wanita</span></button>
+      <button type="button" class="sidebar-link" data-attendance-type="Pengajian Lansia"
+        onclick="selectDashboardType('Pengajian Lansia')"><i class="fa-solid fa-person-cane"></i><span>Pengajian Lansia</span></button>
       <p class="sidebar-section-label sidebar-workspace-label">Program Khusus</p>
       <button type="button" class="sidebar-link" data-attendance-type="Terobosan Pusat"
         onclick="selectDashboardType('Terobosan Pusat')"><i class="fa-solid fa-star-and-crescent"></i><span>Terobosan Pusat</span></button>
@@ -202,6 +204,7 @@
             <option>Pengajian Pengurus</option>
             <option>Pengajian Ibu-Ibu Desa</option>
             <option>ASAD Wanita</option>
+            <option>Pengajian Lansia</option>
             <option>Terobosan Pusat</option>
           </select>
         </label>
@@ -308,7 +311,7 @@
         <select id="r-jenis" onchange="renderRiwayat()">
           <option value="">Semua jenis</option>
           <option>Pengajian Umum</option><option>Pengajian Pengurus</option>
-          <option>Pengajian Ibu-Ibu Desa</option><option>ASAD Wanita</option>
+          <option>Pengajian Ibu-Ibu Desa</option><option>ASAD Wanita</option><option>Pengajian Lansia</option>
           <option>Terobosan Pusat</option>
         </select>
       </label>
@@ -397,7 +400,7 @@
       </div>
       <p id="member-edit-message" class="form-message" role="status"></p>
     </form>
-    <p class="section-help">Kategori pria: Bapak atau Generus. Kategori wanita: Ibu atau Generus. Data lama yang belum diklasifikasikan tidak dihitung pada resume Pengajian Ibu-Ibu Desa maupun ASAD Wanita sampai kategorinya diatur.</p>
+    <p class="section-help">Kategori pria: Bapak, Generus, atau Lansia. Kategori wanita: Ibu, Generus, atau Lansia. Data lama yang belum diklasifikasikan tidak dihitung pada resume Pengajian Ibu-Ibu Desa maupun ASAD Wanita sampai kategorinya diatur.</p>
     <div class="filter-row member-list-filters">
       <label>Filter Kelompok:
         <select id="jamaah-filter-group" onchange="renderJamaah()">
@@ -414,7 +417,7 @@
       <label>Filter Kategori:
         <select id="jamaah-filter-category" onchange="renderJamaah()">
           <option value="">Semua Kategori</option>
-          <option>Bapak</option><option>Ibu</option><option>Generus</option><option>Belum ditentukan</option>
+          <option>Bapak</option><option>Ibu</option><option>Generus</option><option>Lansia</option><option>Belum ditentukan</option>
         </select>
       </label>
       <button id="delete-selected-members" class="table-action" type="button"
