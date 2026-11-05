@@ -758,7 +758,8 @@ function isEligibleDashboardMember(member) {
   if (!member) return false;
   if (currentDashboardType === "Pengajian Pengurus") return member.peran === "Pengurus";
   if (currentDashboardType === "Pengajian Ibu-Ibu Desa")
-    return member.jenisKelamin === "Wanita" && member.kategori === "Ibu";
+    return member.jenisKelamin === "Wanita"
+      && ["Ibu", "Lansia"].includes(member.kategori);
   if (currentDashboardType === "ASAD Wanita")
     return member.jenisKelamin === "Wanita"
       && ["Ibu", "Generus"].includes(member.kategori);

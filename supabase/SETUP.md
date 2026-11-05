@@ -41,7 +41,7 @@ admin and pengurus accounts can add attendance. Password changes are stored cent
 Member records include a gender-specific category: male members can be
 `Bapak`, `Generus`, or `Lansia`, and female members can be `Ibu`, `Generus`,
 or `Lansia`.
-`Pengajian Ibu-Ibu Desa` uses registered female `Ibu` members; `ASAD Wanita`
+`Pengajian Ibu-Ibu Desa` uses registered female `Ibu` and `Lansia` members; `ASAD Wanita`
 uses female `Ibu` and `Generus` members; `Pengajian Lansia` uses all registered
 members categorized as `Lansia`. Its dashboard shows attendance rates for
 senior women and men separately, plus the 0% attendance list, without a 100%
