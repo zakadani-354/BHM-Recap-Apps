@@ -11,6 +11,8 @@ const GROUPS = [
 const TEROBOSAN_TYPE = "Terobosan Pusat";
 const LEGACY_ATTENDANCE_TYPE = "Pengajian Rutin";
 const DEFAULT_ATTENDANCE_TYPE = "Pengajian Umum";
+const MEMBER_CATEGORIES = ["Bapak", "Ibu", "Generus"];
+const UNCLASSIFIED_MEMBER_CATEGORY = "Belum ditentukan";
 const ATTENDANCE_TYPES = [
   DEFAULT_ATTENDANCE_TYPE,
   "Pengajian Pengurus",
@@ -49,7 +51,11 @@ let jamaahData = savedMembers.map((member) => {
   return {
     ...member,
     id,
-    jenisKelamin: normalizeGender(member.jenisKelamin || member.gender)
+    jenisKelamin: normalizeGender(member.jenisKelamin || member.gender),
+    kategori: normalizeMemberCategory(
+      member.kategori || member.kriteria,
+      normalizeGender(member.jenisKelamin || member.gender)
+    )
   };
 });
 let barcodeScanner = null;
@@ -78,6 +84,42 @@ function normalizeGender(value) {
   if (["pria", "laki-laki", "laki laki", "l", "male"].includes(gender)) return "Pria";
   if (["wanita", "perempuan", "p", "female"].includes(gender)) return "Wanita";
   return "Tidak diatur";
+}
+
+function normalizeMemberCategory(value, gender = null) {
+  const category = String(value || "").trim().toLowerCase();
+  const match = MEMBER_CATEGORIES.find((item) => item.toLowerCase() === category);
+  return match && (!gender || isValidMemberCategory(gender, match))
+    ? match
+    : UNCLASSIFIED_MEMBER_CATEGORY;
+}
+
+function memberCategoriesForGender(gender) {
+  if (gender === "Pria") return ["Bapak", "Generus"];
+  if (gender === "Wanita") return ["Ibu", "Generus"];
+  return [];
+}
+
+function isValidMemberCategory(gender, category) {
+  return memberCategoriesForGender(gender).includes(category);
+}
+
+function updateMemberCategoryOptions(selectId, selectedCategory = null, includeUnclassified = false) {
+  const select = document.getElementById(selectId);
+  const genderId = selectId === "j-kategori" ? "j-gender" : "member-edit-gender";
+  const selected = selectedCategory ?? select.value;
+  const gender = document.getElementById(genderId).value;
+  const categories = memberCategoriesForGender(gender);
+  const options = [
+    '<option value="">Pilih kategori...</option>',
+    ...categories.map((category) => `<option>${category}</option>`),
+    ...(includeUnclassified ? [`<option>${UNCLASSIFIED_MEMBER_CATEGORY}</option>`] : [])
+  ];
+  select.innerHTML = options.join("");
+  select.value = categories.includes(selected)
+      || (includeUnclassified && selected === UNCLASSIFIED_MEMBER_CATEGORY)
+    ? selected
+    : "";
 }
 
 function normalizeNameForMatch(value) {
@@ -221,7 +263,14 @@ function cacheSharedState(state) {
   if (!Array.isArray(state.members) || !Array.isArray(state.attendance)) {
     throw new Error("Data bersama dari server tidak memiliki format yang valid.");
   }
-  jamaahData = state.members;
+  jamaahData = state.members.map((member) => {
+    const gender = normalizeGender(member.jenisKelamin || member.gender);
+    return {
+      ...member,
+      jenisKelamin: gender,
+      kategori: normalizeMemberCategory(member.kategori || member.kriteria, gender)
+    };
+  });
   presensiData = state.attendance.map((record) => ({
     ...record,
     jenisPengajian: normalizeAttendanceType(record.jenisPengajian)
@@ -707,9 +756,11 @@ function isDashboardMemberRecord(record, memberLookup) {
 function isEligibleDashboardMember(member) {
   if (!member) return false;
   if (currentDashboardType === "Pengajian Pengurus") return member.peran === "Pengurus";
-  if (currentDashboardType === "Pengajian Ibu-Ibu Desa" || currentDashboardType === "ASAD Wanita") {
-    return member.jenisKelamin === "Wanita";
-  }
+  if (currentDashboardType === "Pengajian Ibu-Ibu Desa")
+    return member.jenisKelamin === "Wanita" && member.kategori === "Ibu";
+  if (currentDashboardType === "ASAD Wanita")
+    return member.jenisKelamin === "Wanita"
+      && ["Ibu", "Generus"].includes(member.kategori);
   return true;
 }
 
@@ -1529,10 +1580,12 @@ function renderJamaah() {
   const isAdmin = window.currentRole === "admin";
   const group = document.getElementById("jamaah-filter-group").value;
   const role = document.getElementById("jamaah-filter-role").value;
+  const category = document.getElementById("jamaah-filter-category").value;
   document.getElementById("jamaah-table").innerHTML = [...jamaahData]
     .map((member, index) => ({ member, index }))
     .filter(({ member }) => (!group || member.kelompok === group)
-      && (!role || member.peran === role))
+      && (!role || member.peran === role)
+      && (!category || member.kategori === category))
     .sort((a, b) => a.member.kelompok.localeCompare(b.member.kelompok)
       || a.member.nama.localeCompare(b.member.nama))
     .map(({ member, index }) => `<tr>
@@ -1546,13 +1599,23 @@ function renderJamaah() {
             <option value="">Atur jenis kelamin...</option><option value="Pria">Pria</option><option value="Wanita">Wanita</option>
           </select>`
         : escapeHtml(member.jenisKelamin)}</td>
+      <td>${isAdmin
+        ? `<label class="sr-only" for="member-category-${index}">Kategori jamaah ${escapeHtml(member.nama)}</label>
+          <select id="member-category-${index}" class="member-category-select"
+            onchange="updateMemberCategory(${index},this.value)">
+            ${[
+    ...memberCategoriesForGender(member.jenisKelamin),
+    UNCLASSIFIED_MEMBER_CATEGORY
+  ].map((item) => `<option${item === member.kategori ? " selected" : ""}>${escapeHtml(item)}</option>`).join("")}
+          </select>`
+        : escapeHtml(member.kategori)}</td>
       <td>${escapeHtml(member.peran)}</td>
       <td class="member-actions">
         <button class="table-action" type="button" onclick="selectMemberBarcode(${index})">Barcode</button>
         ${isAdmin ? `<button class="table-action member-edit-button" type="button" onclick="editJamaah(${index})">Edit</button>` : ""}
         ${isAdmin ? `<button class="table-action" type="button" onclick="removeJamaah(${index})" aria-label="Hapus ${escapeHtml(member.nama)}">Hapus</button>` : ""}
       </td>
-    </tr>`).join("") || `<tr><td colspan="${isAdmin ? 6 : 5}">Tidak ada data jamaah yang sesuai filter.</td></tr>`;
+    </tr>`).join("") || `<tr><td colspan="${isAdmin ? 7 : 6}">Tidak ada data jamaah yang sesuai filter.</td></tr>`;
   document.getElementById("jamaah-select-all-header").classList.toggle("hidden", !isAdmin);
   document.getElementById("jamaah-select-all").checked = false;
   document.getElementById("jamaah-select-all").indeterminate = false;
@@ -1759,7 +1822,7 @@ async function downloadBarcodePdf() {
     pdf.setFontSize(12);
     pdf.text(`Nama: ${member.nama}`, 15, 29);
     pdf.text(`Kelompok: ${member.kelompok}`, 15, 36);
-    pdf.text(`Jenis kelamin: ${member.jenisKelamin} · Peran: ${member.peran}`, 15, 43);
+    pdf.text(`Jenis kelamin: ${member.jenisKelamin} · Kategori: ${member.kategori} · Peran: ${member.peran}`, 15, 43);
     pdf.addImage(dataUrl, "PNG", 55, 51, 100, 124);
     pdf.save(`barcode-${member.nama.replace(/[^\w-]+/g, "-").toLowerCase()}.pdf`);
     message.textContent = "Barcode PDF berhasil diunduh.";
@@ -2167,12 +2230,14 @@ function addJamaah() {
     nama: document.getElementById("j-nama").value.trim(),
     kelompok: document.getElementById("j-kelompok").value,
     jenisKelamin: document.getElementById("j-gender").value,
+    kategori: document.getElementById("j-kategori").value,
     id: createMemberId(),
     peran: document.getElementById("j-peran").value
   };
   if (!member.nama || !GROUPS.includes(member.kelompok)
-      || !["Pria", "Wanita"].includes(member.jenisKelamin)) {
-    alert("Isi nama, pilih kelompok, dan tentukan jenis kelamin.");
+      || !["Pria", "Wanita"].includes(member.jenisKelamin)
+      || !isValidMemberCategory(member.jenisKelamin, member.kategori)) {
+    alert("Isi nama, kelompok, jenis kelamin, dan kategori jamaah yang sesuai.");
     return;
   }
   if (isDuplicateMember(member)) {
@@ -2183,6 +2248,8 @@ function addJamaah() {
   saveMembers();
   document.getElementById("j-nama").value = "";
   document.getElementById("j-gender").value = "";
+  document.getElementById("j-kategori").innerHTML =
+    '<option value="">Pilih jenis kelamin dahulu...</option>';
   renderJamaah();
   renderDashboard();
 }
@@ -2216,6 +2283,24 @@ function updateMemberGender(index, gender) {
     return;
   }
   member.jenisKelamin = gender;
+  member.kategori = normalizeMemberCategory(member.kategori, gender);
+  saveMembers();
+  renderJamaah();
+  renderDashboard();
+}
+
+function updateMemberCategory(index, category) {
+  const member = jamaahData[index];
+  if (window.currentRole !== "admin" || !member) {
+    alert("Hanya admin yang dapat memperbarui data jamaah.");
+    return;
+  }
+  if (category !== UNCLASSIFIED_MEMBER_CATEGORY
+      && !isValidMemberCategory(member.jenisKelamin, category)) {
+    renderJamaah();
+    return;
+  }
+  member.kategori = category;
   saveMembers();
   renderJamaah();
   renderDashboard();
@@ -2234,6 +2319,11 @@ function editJamaah(index) {
   document.getElementById("member-edit-group").value = member.kelompok;
   document.getElementById("member-edit-gender").value =
     ["Pria", "Wanita"].includes(member.jenisKelamin) ? member.jenisKelamin : "";
+  updateMemberCategoryOptions(
+    "member-edit-category",
+    normalizeMemberCategory(member.kategori, member.jenisKelamin),
+    true
+  );
   document.getElementById("member-edit-role").value = member.peran;
   document.getElementById("member-edit-message").textContent = "";
   document.getElementById("member-edit-message").className = "form-message";
@@ -2272,12 +2362,14 @@ function saveJamaahEdit() {
     nama: document.getElementById("member-edit-name").value.trim().replace(/\s+/g, " "),
     kelompok: document.getElementById("member-edit-group").value,
     jenisKelamin: document.getElementById("member-edit-gender").value,
+    kategori: document.getElementById("member-edit-category").value,
     peran: document.getElementById("member-edit-role").value
   };
   if (!updatedMember.nama || !GROUPS.includes(updatedMember.kelompok)
       || !["Pria", "Wanita"].includes(updatedMember.jenisKelamin)
+      || !isValidMemberCategory(updatedMember.jenisKelamin, updatedMember.kategori)
       || !["Jamaah", "Pengurus"].includes(updatedMember.peran)) {
-    message.textContent = "Lengkapi nama, kelompok, jenis kelamin, dan peran dengan data yang valid.";
+    message.textContent = "Lengkapi nama, kelompok, jenis kelamin, kategori jamaah, dan peran dengan data yang valid.";
     message.className = "form-message error-message";
     return;
   }
@@ -2339,25 +2431,58 @@ async function importFileData() {
     const rows = parseCsv(text);
     if (!rows.length) throw new Error("Tidak ada baris data untuk diimpor.");
     const hasHeader = /nama/i.test(rows[0][0] || "");
+    const headerIndex = hasHeader
+      ? new Map(rows[0].map((value, index) => [
+        value.toLowerCase().replace(/[^a-z]/g, ""),
+        index
+      ]))
+      : null;
+    const findHeaderIndex = (names) => names
+      .map((name) => headerIndex?.get(name))
+      .find((index) => index !== undefined);
     const dataRows = hasHeader ? rows.slice(1) : rows;
     const incoming = [];
     const errors = [];
     dataRows.forEach((row, index) => {
-      const [nama = "", kelompok = "", third = "", fourth = ""] = row;
-      const oldFormat = ["jamaah", "pengurus"].includes(third.trim().toLowerCase());
-      const role = oldFormat ? third.trim().toLowerCase()
-        : (fourth || "Jamaah").trim().toLowerCase();
+      const nameIndex = findHeaderIndex(["nama", "namalengkap"]);
+      const groupIndex = findHeaderIndex(["kelompok"]);
+      const genderIndex = findHeaderIndex(["jeniskelamin", "gender"]);
+      const categoryIndex = findHeaderIndex(["kategorijamaah", "kategori", "kriteria"]);
+      const roleIndex = findHeaderIndex(["peran", "role"]);
+      const [legacyName = "", legacyGroup = "", third = "", fourth = "", fifth = ""] = row;
+      const oldFormat = !hasHeader && ["jamaah", "pengurus"].includes(third.trim().toLowerCase());
+      const nama = hasHeader ? row[nameIndex] || "" : legacyName;
+      const kelompok = hasHeader ? row[groupIndex] || "" : legacyGroup;
+      const genderValue = hasHeader
+        ? row[genderIndex] || ""
+        : oldFormat ? "" : third;
+      const categoryValue = hasHeader
+        ? row[categoryIndex] || ""
+        : row.length >= 5 ? fourth : "";
+      const roleValue = hasHeader
+        ? row[roleIndex] || ""
+        : oldFormat ? third : row.length >= 5 ? fifth : fourth;
+      const gender = genderValue
+        ? normalizeGender(genderValue)
+        : "Tidak diatur";
+      const category = categoryValue
+        ? normalizeMemberCategory(categoryValue, gender)
+        : UNCLASSIFIED_MEMBER_CATEGORY;
       const member = {
         nama: nama.trim(),
         kelompok: kelompok.trim(),
-        jenisKelamin: oldFormat ? "Tidak diatur" : normalizeGender(third),
-        peran: role === "pengurus" ? "Pengurus" : "Jamaah",
+        jenisKelamin: gender,
+        kategori: category,
+        peran: roleValue.trim().toLowerCase() === "pengurus" ? "Pengurus" : "Jamaah",
         id: createMemberId()
       };
       if (!member.nama || !GROUPS.includes(member.kelompok)
           || !["Pria", "Wanita", "Tidak diatur"].includes(member.jenisKelamin)
+          || (categoryValue
+            && member.kategori === UNCLASSIFIED_MEMBER_CATEGORY
+            && categoryValue.trim().toLowerCase() !== UNCLASSIFIED_MEMBER_CATEGORY.toLowerCase())
           || !["Jamaah", "Pengurus"].includes(member.peran)) {
-        errors.push(`Baris ${index + (hasHeader ? 2 : 1)}: nama, kelompok, jenis kelamin, atau peran tidak valid.`);
+        errors.push(`Baris ${index + (hasHeader ? 2 : 1)}: nama, kelompok, jenis kelamin, kategori jamaah, atau peran tidak valid.`);
       } else if (isDuplicateMember(member, [...jamaahData, ...incoming])) {
         errors.push(`Baris ${index + (hasHeader ? 2 : 1)}: ${member.nama} sudah terdaftar.`);
       } else {

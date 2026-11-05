@@ -38,6 +38,15 @@ database is still empty. Once shared data exists, each login loads the shared
 copy instead of that device's local copy. Admin accounts can edit member data;
 admin and pengurus accounts can add attendance. Password changes are stored centrally.
 
+Member records include a gender-specific category: male members can be
+`Bapak` or `Generus`, and female members can be `Ibu` or `Generus`.
+`Pengajian Ibu-Ibu Desa` uses registered female `Ibu` members; `ASAD Wanita`
+uses female `Ibu` and `Generus` members. Existing members without a category
+are marked `Belum ditentukan` and excluded from those dashboard totals until
+an admin classifies them in Data Jamaah. CSV imports can include the columns
+`Nama,Kelompok,Jenis Kelamin,Kategori Jamaah,Peran`; older formats remain
+supported but require category assignment for those dashboards.
+
 To create the attendance-only link after deployment, set
 `BHM_ATTENDANCE_LINK_TOKEN` and redeploy, then send the attendee this URL:
 `https://<your-app-domain>/#presensi=<the-token>`. The browser fragment is not

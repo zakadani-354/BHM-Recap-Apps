@@ -350,7 +350,12 @@
           </select>
         </label>
         <label>Jenis Kelamin
-          <select id="j-gender" required><option value="">Pilih...</option><option>Pria</option><option>Wanita</option></select>
+          <select id="j-gender" required onchange="updateMemberCategoryOptions('j-kategori')"><option value="">Pilih...</option><option>Pria</option><option>Wanita</option></select>
+        </label>
+        <label>Kategori Jamaah
+          <select id="j-kategori" required>
+            <option value="">Pilih jenis kelamin dahulu...</option>
+          </select>
         </label>
         <label>Peran
           <select id="j-peran"><option>Jamaah</option><option>Pengurus</option></select>
@@ -372,8 +377,13 @@
           </select>
         </label>
         <label>Jenis Kelamin
-          <select id="member-edit-gender" required>
+          <select id="member-edit-gender" required onchange="updateMemberCategoryOptions('member-edit-category', null, true)">
             <option value="">Pilih...</option><option>Pria</option><option>Wanita</option>
+          </select>
+        </label>
+        <label>Kategori Jamaah
+          <select id="member-edit-category" required>
+            <option value="">Pilih jenis kelamin dahulu...</option>
           </select>
         </label>
         <label>Peran
@@ -387,6 +397,7 @@
       </div>
       <p id="member-edit-message" class="form-message" role="status"></p>
     </form>
+    <p class="section-help">Kategori pria: Bapak atau Generus. Kategori wanita: Ibu atau Generus. Data lama yang belum diklasifikasikan tidak dihitung pada resume Pengajian Ibu-Ibu Desa maupun ASAD Wanita sampai kategorinya diatur.</p>
     <div class="filter-row member-list-filters">
       <label>Filter Kelompok:
         <select id="jamaah-filter-group" onchange="renderJamaah()">
@@ -400,6 +411,12 @@
           <option value="">Semua Peran</option><option>Jamaah</option><option>Pengurus</option>
         </select>
       </label>
+      <label>Filter Kategori:
+        <select id="jamaah-filter-category" onchange="renderJamaah()">
+          <option value="">Semua Kategori</option>
+          <option>Bapak</option><option>Ibu</option><option>Generus</option><option>Belum ditentukan</option>
+        </select>
+      </label>
       <button id="delete-selected-members" class="table-action" type="button"
         onclick="deleteSelectedMembers()" disabled>Hapus dipilih (0)</button>
       <p id="jamaah-action-message" class="form-message" role="status"></p>
@@ -408,15 +425,15 @@
       <thead><tr>
         <th id="jamaah-select-all-header"><input id="jamaah-select-all" type="checkbox" aria-label="Pilih semua jamaah yang tampil"
           onchange="toggleAllMemberSelection(this.checked)"></th>
-        <th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Peran</th><th>Barcode / Aksi</th>
+        <th>Nama</th><th>Kelompok</th><th>Jenis Kelamin</th><th>Kategori Jamaah</th><th>Peran</th><th>Barcode / Aksi</th>
       </tr></thead>
       <tbody id="jamaah-table"></tbody>
     </table>
   </div>
 
   <div id="jamaah-file" class="hidden">
-    <p>Paste data CSV (Nama,Kelompok,Jenis Kelamin,Peran). CSV lama Nama,Kelompok,Peran tetap didukung:</p>
-    <textarea id="file-paste" rows="4" placeholder="Ahmad,Baitu Taqwa,Pria,Jamaah"></textarea>
+    <p>Paste data CSV (Nama,Kelompok,Jenis Kelamin,Kategori Jamaah,Peran). Format lama tanpa kategori tetap didukung:</p>
+    <textarea id="file-paste" rows="4" placeholder="Ahmad,Baitu Taqwa,Pria,Bapak,Jamaah"></textarea>
     <div class="import-controls">
       <label>File CSV <input id="jamaah-file-input" type="file" accept=".csv,.txt,text/csv"></label>
       <button class="btn-secondary" onclick="importFileData()"><i class="fa-solid fa-file-import"></i> Import</button>
