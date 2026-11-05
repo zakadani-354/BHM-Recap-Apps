@@ -69,8 +69,7 @@ code, but never logs the API key or login password.
 - `PGRST202` or `42883`: the RPC named in the Vercel Function log is missing or
   not in the PostgREST schema cache. Run the entire `schema.sql` in the correct
   project's SQL Editor. The script requests a schema-cache reload and shows a
-  verification row; retry the login after confirming all eight values are
-  `true`.
+  verification row; retry after confirming all nine values are `true`.
 - `PGRST205` or `42P01`: the shared-state table is missing. Run `schema.sql`
   against that project.
 - `401`, `403`, or `42501`: verify the Vercel variable names and values, especially
@@ -85,6 +84,10 @@ code, but never logs the API key or login password.
 - `21000`: the database found multiple rows for one operation. Run the complete
   `schema.sql` in the matching Supabase project; Terobosan Pusat events are
   rebuilt as one row per year.
+- Attendance deletion now uses the `bhm_delete_app_attendance` RPC to delete
+  only selected records instead of resaving the complete history. If the
+  function is missing, run the complete `schema.sql` in the matching project
+  and redeploy the latest app.
 - Any other status or code: check that `SUPABASE_URL` is the Project URL for the
   same Supabase project where `schema.sql` was run.
 - A plain HTTP 404 without a Supabase error code usually means `SUPABASE_URL`

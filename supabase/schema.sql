@@ -346,6 +346,131 @@ begin
 end;
 $$;
 
+create or replace function public.bhm_delete_app_attendance(
+  p_data jsonb
+)
+returns bigint
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  saved_revision bigint;
+  current_attendance jsonb;
+begin
+  if p_data is null or jsonb_typeof(p_data) is distinct from 'array' then
+    raise exception 'Attendance deletions must be a non-empty array';
+  end if;
+  if jsonb_array_length(p_data) = 0 then
+    raise exception 'Attendance deletions must be a non-empty array';
+  end if;
+
+  if exists (
+    select 1
+    from jsonb_array_elements(p_data) as selected(entry)
+    where jsonb_typeof(entry) is distinct from 'object'
+      or entry->>'nama' is null
+      or btrim(entry->>'nama') = ''
+      or entry->>'kelompok' is null
+      or entry->>'tanggal' is null
+      or entry->>'tanggal' !~ '^\d{4}-\d{2}-\d{2}$'
+      or (entry->>'tanggal')::date::text <> entry->>'tanggal'
+      or entry->>'jenisPengajian' is null
+      or entry->>'jenisPengajian' not in (
+        'Pengajian Rutin',
+        'Pengajian Umum',
+        'Pengajian Pengurus',
+        'Pengajian Ibu-Ibu Desa',
+        'ASAD Wanita',
+        'Terobosan Pusat'
+      )
+  ) then
+    raise exception 'Attendance deletion contains an invalid record';
+  end if;
+
+  insert into public.bhm_app_state (id)
+  values ('shared')
+  on conflict (id) do nothing;
+
+  select attendance
+  into current_attendance
+  from public.bhm_app_state
+  where id = 'shared'
+  for update;
+
+  update public.bhm_app_state
+  set attendance = coalesce((
+        select jsonb_agg(existing.entry order by existing.ordinality)
+        from jsonb_array_elements(current_attendance)
+          with ordinality as existing(entry, ordinality)
+        where not exists (
+          select 1
+          from jsonb_array_elements(p_data) as selected(entry)
+          where selected.entry->>'tanggal' = existing.entry->>'tanggal'
+            and case coalesce(selected.entry->>'jenisPengajian', 'Pengajian Umum')
+              when 'Pengajian Rutin' then 'Pengajian Umum'
+              else selected.entry->>'jenisPengajian'
+            end = case coalesce(existing.entry->>'jenisPengajian', 'Pengajian Umum')
+              when 'Pengajian Rutin' then 'Pengajian Umum'
+              else existing.entry->>'jenisPengajian'
+            end
+            and case
+              when selected.entry->>'memberId' is not null
+                  and existing.entry->>'memberId' is not null
+                then selected.entry->>'memberId' = existing.entry->>'memberId'
+              else lower(btrim(selected.entry->>'nama')) = lower(btrim(existing.entry->>'nama'))
+                and selected.entry->>'kelompok' = existing.entry->>'kelompok'
+            end
+        )
+      ), '[]'::jsonb),
+      revision = revision + 1,
+      updated_at = now()
+  where id = 'shared'
+  returning revision into saved_revision;
+
+  update public.bhm_terobosan_events as event
+  set attendance = coalesce((
+        select jsonb_agg(existing.entry order by existing.ordinality)
+        from jsonb_array_elements(event.attendance)
+          with ordinality as existing(entry, ordinality)
+        where not exists (
+          select 1
+          from jsonb_array_elements(p_data) as selected(entry)
+          where selected.entry->>'jenisPengajian' = 'Terobosan Pusat'
+            and coalesce(existing.entry->>'tanggal', event.event_date::text)
+              = selected.entry->>'tanggal'
+            and case
+              when selected.entry->>'memberId' is not null
+                  and existing.entry->>'memberId' is not null
+                then selected.entry->>'memberId' = existing.entry->>'memberId'
+              else lower(btrim(selected.entry->>'nama')) = lower(btrim(existing.entry->>'nama'))
+                and selected.entry->>'kelompok' = existing.entry->>'kelompok'
+            end
+        )
+      ), '[]'::jsonb)
+  where exists (
+    select 1
+    from jsonb_array_elements(event.attendance) as existing(entry)
+    join jsonb_array_elements(p_data) as selected(entry)
+      on selected.entry->>'jenisPengajian' = 'Terobosan Pusat'
+      and coalesce(existing.entry->>'tanggal', event.event_date::text)
+        = selected.entry->>'tanggal'
+      and case
+        when selected.entry->>'memberId' is not null
+            and existing.entry->>'memberId' is not null
+          then selected.entry->>'memberId' = existing.entry->>'memberId'
+        else lower(btrim(selected.entry->>'nama')) = lower(btrim(existing.entry->>'nama'))
+          and selected.entry->>'kelompok' = existing.entry->>'kelompok'
+      end
+  );
+
+  delete from public.bhm_terobosan_events
+  where attendance = '[]'::jsonb;
+
+  return saved_revision;
+end;
+$$;
+
 create or replace function public.bhm_append_terobosan_attendance(
   p_data jsonb
 )
@@ -498,11 +623,13 @@ revoke all on function public.bhm_authenticate_app_user(text, text) from public,
 revoke all on function public.bhm_change_app_password(text, text) from public, anon, authenticated;
 revoke all on function public.bhm_save_app_collection(text, jsonb) from public, anon, authenticated;
 revoke all on function public.bhm_append_app_attendance(jsonb) from public, anon, authenticated;
+revoke all on function public.bhm_delete_app_attendance(jsonb) from public, anon, authenticated;
 revoke all on function public.bhm_append_terobosan_attendance(jsonb) from public, anon, authenticated;
 grant execute on function public.bhm_authenticate_app_user(text, text) to service_role;
 grant execute on function public.bhm_change_app_password(text, text) to service_role;
 grant execute on function public.bhm_save_app_collection(text, jsonb) to service_role;
 grant execute on function public.bhm_append_app_attendance(jsonb) to service_role;
+grant execute on function public.bhm_delete_app_attendance(jsonb) to service_role;
 grant execute on function public.bhm_append_terobosan_attendance(jsonb) to service_role;
 
 notify pgrst, 'reload schema';
@@ -514,5 +641,6 @@ select
   to_regprocedure('public.bhm_change_app_password(text,text)') is not null as password_function_ready,
   to_regprocedure('public.bhm_save_app_collection(text,jsonb)') is not null as save_function_ready,
   to_regprocedure('public.bhm_append_app_attendance(jsonb)') is not null as attendance_append_function_ready,
+  to_regprocedure('public.bhm_delete_app_attendance(jsonb)') is not null as attendance_delete_function_ready,
   to_regclass('public.bhm_terobosan_events') is not null as terobosan_table_ready,
   to_regprocedure('public.bhm_append_terobosan_attendance(jsonb)') is not null as terobosan_append_function_ready;

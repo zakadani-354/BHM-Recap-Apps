@@ -304,6 +304,14 @@ async function saveCollection(config, collection, data) {
   return Number(revision || 0);
 }
 
+async function deleteAttendance(config, records) {
+  const revision = await supabaseRequest(config, "rpc/bhm_delete_app_attendance", {
+    method: "POST",
+    body: JSON.stringify({ p_data: records })
+  });
+  return Number(revision || 0);
+}
+
 async function handle(req, res) {
   if (req.method !== "GET" && req.method !== "POST") {
     res.setHeader("Allow", "GET, POST");
@@ -481,6 +489,21 @@ async function handle(req, res) {
       body: JSON.stringify({ p_data: body.records })
     });
     json(res, 200, { ok: true, revision: Number(revision || 0) });
+    return;
+  }
+
+  if (body.action === "attendance-delete") {
+    if (session.role === "presensi") {
+      throw new ApiError(403, "ATTENDANCE_DELETE_NOT_ALLOWED", "Akun pengisi presensi tidak dapat menghapus catatan.");
+    }
+    if (!Array.isArray(body.records) || body.records.length === 0) {
+      throw new ApiError(400, "INVALID_DATA", "Pilih setidaknya satu catatan presensi untuk dihapus.");
+    }
+    if (Buffer.byteLength(JSON.stringify(body.records), "utf8") > MAX_BODY_BYTES) {
+      throw new ApiError(413, "BODY_TOO_LARGE", "Ukuran data melebihi batas 4 MB.");
+    }
+    const revision = await deleteAttendance(config, body.records);
+    json(res, 200, { ok: true, revision });
     return;
   }
 

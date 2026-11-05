@@ -183,15 +183,12 @@ function setSyncStatus(text, state = "") {
   status.className = `sync-status${state ? ` ${state}` : ""}`;
 }
 
-function queueSharedSave(collection, data, attendanceAppend = false, rejectOnFailure = false) {
+function queueSharedRequest(collection, request, rejectOnFailure = false) {
   if (!sharedSyncEnabled) return Promise.resolve();
-  const snapshot = JSON.parse(JSON.stringify(data));
   sharedSyncPending += 1;
   const saveRequest = sharedSyncQueue
     .then(async () => {
-      const result = attendanceAppend
-        ? await requestSharedApi("attendance-add", { records: snapshot })
-        : await requestSharedApi("save", { collection, data: snapshot });
+      const result = await request();
       sharedDataRevision = Math.max(sharedDataRevision, Number(result.revision || 0));
       setSyncStatus("Data bersama tersinkron", "sync-online");
     })
@@ -205,6 +202,19 @@ function queueSharedSave(collection, data, attendanceAppend = false, rejectOnFai
     });
   sharedSyncQueue = saveRequest.catch(() => {});
   return saveRequest;
+}
+
+function queueSharedSave(collection, data, attendanceAppend = false, rejectOnFailure = false) {
+  const snapshot = JSON.parse(JSON.stringify(data));
+  return queueSharedRequest(collection, () => attendanceAppend
+    ? requestSharedApi("attendance-add", { records: snapshot })
+    : requestSharedApi("save", { collection, data: snapshot }), rejectOnFailure);
+}
+
+function queueSharedAttendanceDelete(records, rejectOnFailure = false) {
+  const snapshot = JSON.parse(JSON.stringify(records));
+  return queueSharedRequest("attendance", () =>
+    requestSharedApi("attendance-delete", { records: snapshot }), rejectOnFailure);
 }
 
 function cacheSharedState(state) {
@@ -1489,9 +1499,13 @@ async function deleteSelectedAttendance() {
   if (!window.confirm(`Hapus ${selectedIndices.size} catatan presensi yang dipilih?`)) return;
 
   const previousAttendance = presensiData;
+  const deletedRecords = [...selectedIndices]
+    .map((index) => presensiData[index])
+    .filter(Boolean);
   presensiData = presensiData.filter((_, index) => !selectedIndices.has(index));
+  localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
   try {
-    await saveAttendance(null, true);
+    await queueSharedAttendanceDelete(deletedRecords, true);
   } catch (error) {
     presensiData = previousAttendance;
     localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
