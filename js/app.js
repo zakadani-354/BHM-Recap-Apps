@@ -129,20 +129,18 @@ function getAccounts() {
   return accounts;
 }
 
-function saveAttendance(additions = null) {
+function saveAttendance(additions = null, waitForSync = false) {
   localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
   if (window.currentRole === "presensi") {
     if (!Array.isArray(additions) || additions.length === 0) {
       throw new Error("Akun pengisi hanya dapat menambahkan catatan presensi.");
     }
-    queueSharedSave("attendance", additions, true);
-    return;
+    return queueSharedSave("attendance", additions, true, waitForSync);
   }
   if (Array.isArray(additions) && additions.length > 0) {
-    queueSharedSave("attendance", additions, true);
-    return;
+    return queueSharedSave("attendance", additions, true, waitForSync);
   }
-  queueSharedSave("attendance", presensiData);
+  return queueSharedSave("attendance", presensiData, false, waitForSync);
 }
 
 function saveMembers() {
@@ -185,11 +183,11 @@ function setSyncStatus(text, state = "") {
   status.className = `sync-status${state ? ` ${state}` : ""}`;
 }
 
-function queueSharedSave(collection, data, attendanceAppend = false) {
-  if (!sharedSyncEnabled) return;
+function queueSharedSave(collection, data, attendanceAppend = false, rejectOnFailure = false) {
+  if (!sharedSyncEnabled) return Promise.resolve();
   const snapshot = JSON.parse(JSON.stringify(data));
   sharedSyncPending += 1;
-  sharedSyncQueue = sharedSyncQueue
+  const saveRequest = sharedSyncQueue
     .then(async () => {
       const result = attendanceAppend
         ? await requestSharedApi("attendance-add", { records: snapshot })
@@ -200,10 +198,13 @@ function queueSharedSave(collection, data, attendanceAppend = false) {
     .catch((error) => {
       console.error(`Could not sync shared ${collection}.`, error);
       setSyncStatus(`Gagal sinkron: ${error.message}`, "sync-error");
+      if (rejectOnFailure) throw error;
     })
     .finally(() => {
       sharedSyncPending -= 1;
     });
+  sharedSyncQueue = saveRequest.catch(() => {});
+  return saveRequest;
 }
 
 function cacheSharedState(state) {
@@ -1475,7 +1476,7 @@ function toggleAllAttendanceSelection(checked) {
   updateAttendanceSelection();
 }
 
-function deleteSelectedAttendance() {
+async function deleteSelectedAttendance() {
   if (window.currentRole === "presensi") {
     alert("Akun pengisi presensi tidak dapat menghapus catatan.");
     return;
@@ -1487,8 +1488,21 @@ function deleteSelectedAttendance() {
   if (!selectedIndices.size) return;
   if (!window.confirm(`Hapus ${selectedIndices.size} catatan presensi yang dipilih?`)) return;
 
+  const previousAttendance = presensiData;
   presensiData = presensiData.filter((_, index) => !selectedIndices.has(index));
-  saveAttendance();
+  try {
+    await saveAttendance(null, true);
+  } catch (error) {
+    presensiData = previousAttendance;
+    localStorage.setItem(STORAGE_KEYS.attendance, JSON.stringify(presensiData));
+    const message = document.getElementById("riwayat-delete-message");
+    message.textContent = `Penghapusan gagal disinkronkan: ${error.message}`;
+    message.className = "form-message error-message";
+    renderRiwayat();
+    renderDashboard();
+    updateTerobosanAttendanceCounts();
+    return;
+  }
   const message = document.getElementById("riwayat-delete-message");
   message.textContent = `${selectedIndices.size} catatan presensi berhasil dihapus.`;
   message.className = "form-message success-message";
