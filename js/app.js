@@ -858,6 +858,7 @@ function selectedPeriodRecords() {
   const endMonth = mode === "month" ? selectedMonth : endFilter.value;
   const memberLookup = createDashboardMemberLookup();
   const allPeriodRecords = dashboardRecordsForPeriod(startMonth, endMonth, "", memberLookup);
+  const periodMeetingDates = dashboardMeetingDates(allPeriodRecords);
   const allMonthRecords = selectedGroup
     ? allPeriodRecords.filter((record) => record.kelompok === selectedGroup)
     : allPeriodRecords;
@@ -877,14 +878,16 @@ function selectedPeriodRecords() {
       const groupRecordsList = summary?.records || [];
       const members = (memberLookup.membersByGroup.get(group) || [])
         .filter(isEligibleDashboardMember);
-      const capacity = members.length * (summary?.dates.size || 0);
+      const meetingCount = summary?.dates.size || periodMeetingDates.size;
+      const capacity = members.length * meetingCount;
       const present = countDistinctPresentAttendances(groupRecordsList, memberLookup);
       const rate = capacity ? present / capacity : 0;
       return {
         group,
         records: groupRecordsList,
         rate,
-        percentage: Math.round(rate * 100)
+        percentage: Math.round(rate * 100),
+        hasMeetings: meetingCount > 0 && members.length > 0
       };
     });
   };
@@ -894,6 +897,7 @@ function selectedPeriodRecords() {
     groups,
     chartGroups,
     allMonthRecords,
+    periodMeetingDates,
     selectedMonth,
     startMonth,
     endMonth,
@@ -1165,6 +1169,7 @@ function renderDashboard() {
   const {
     chartGroups,
     allMonthRecords,
+    periodMeetingDates,
     selectedMonth,
     startMonth,
     endMonth,
@@ -1207,8 +1212,11 @@ function renderDashboard() {
   const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [], full: [] }]));
   const meetingDatesByGroup = new Map(GROUPS.map((group) => [
     group,
-    dashboardMeetingDates(allMonthRecords.filter((record) =>
-      record.kelompok === group && isDashboardMemberRecord(record, memberLookup)))
+    (() => {
+      const groupDates = dashboardMeetingDates(allMonthRecords.filter((record) =>
+        record.kelompok === group && isDashboardMemberRecord(record, memberLookup)));
+      return groupDates.size ? groupDates : periodMeetingDates;
+    })()
   ]));
   eligibleMembers.forEach((member) => {
     const counts = groupAttendanceCounts.get(member.kelompok);
@@ -1321,15 +1329,15 @@ function renderDashboard() {
   }
 
   document.getElementById("attendance-chart").innerHTML = chartGroups.length
-    ? chartGroups.map(({ group, records, percentage }) => {
+    ? chartGroups.map(({ group, percentage, hasMeetings }) => {
       const isSelected = selectedGroup === group;
       return `<button type="button" class="chart-row dashboard-chart-row${isSelected ? " chart-row-selected" : ""}"
         style="--group-chart-color:${dashboardGroupColor(group)}"
-        aria-pressed="${isSelected}" aria-label="${escapeHtml(group)}, ${records.length ? `${percentage}% hadir` : "belum ada presensi"}"
+        aria-pressed="${isSelected}" aria-label="${escapeHtml(group)}, ${hasMeetings ? `${percentage}% hadir` : "belum ada presensi"}"
         onclick="selectDashboardGroup('${escapeHtml(group)}')">
         <span class="chart-label">${escapeHtml(group)}</span>
         <span class="chart-track" aria-hidden="true"><span class="chart-bar" style="width:${percentage}%"></span></span>
-        <span class="chart-value">${records.length ? `${percentage}%` : "—"}</span>
+        <span class="chart-value">${hasMeetings ? `${percentage}%` : "—"}</span>
       </button>`;
     }).join("")
     : '<p class="chart-empty">Belum ada data presensi.</p>';
