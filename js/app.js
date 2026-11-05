@@ -378,6 +378,7 @@ function showPage(id, selectedFromSidebar = false) {
   }
   const target = document.getElementById(`page-${id}`);
   if (!target) throw new Error(`Halaman "${id}" tidak ditemukan.`);
+  document.getElementById("dashboard-share-menu").classList.toggle("hidden", id !== "dashboard");
   if (window.currentRole === "presensi" && id !== "presensi") {
     showPage("presensi");
     return;
@@ -710,6 +711,7 @@ async function startPublicDashboard() {
   setSyncStatus("Dashboard publik · Hanya baca", "sync-online");
   document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
   document.getElementById("page-dashboard").classList.remove("hidden");
+  document.getElementById("dashboard-share-menu").classList.remove("hidden");
   document.getElementById("workspace-page-title").textContent = currentDashboardType;
   attendanceTypeChanged();
   renderDashboard();
@@ -1027,6 +1029,11 @@ function scrollToZeroAttendance() {
   });
 }
 
+function chooseDashboardShare(format) {
+  document.getElementById("dashboard-share-menu").open = false;
+  shareDashboard(format);
+}
+
 function dashboardExportFilename(extension) {
   const group = document.getElementById("f-group").value;
   const mode = document.getElementById("f-bulan-mode").value;
@@ -1211,9 +1218,11 @@ function renderAttendanceTrend(selectedGroup, memberLookup) {
     const x = xFor(index);
     const y = yFor(point.rate);
     const showLabel = index % labelStep === 0 || index === points.length - 1;
+    const formattedRate = point.rate.toLocaleString("id-ID", { maximumFractionDigits: 1 });
     return `<g class="trend-point">
-    <title>${escapeHtml(monthLabel(point.month))}: ${escapeHtml(point.rate.toLocaleString("id-ID", { maximumFractionDigits: 1 }))}%</title>
+    <title>${escapeHtml(monthLabel(point.month))}: ${escapeHtml(formattedRate)}%</title>
     <circle cx="${x}" cy="${y}" r="5" class="trend-point-dot"></circle>
+    ${showLabel ? `<text x="${x}" y="${y - 11}" text-anchor="middle" class="trend-data-label">${escapeHtml(formattedRate)}%</text>` : ""}
     ${showLabel ? `<text x="${x}" y="${height - 18}" text-anchor="middle" class="trend-axis-label">${escapeHtml(monthLabel(point.month))}</text>` : ""}
     </g>`;
   }).join("");
@@ -1312,7 +1321,7 @@ function renderDashboard() {
   const attendanceRate = totalCapacity ? totalAttendance / totalCapacity * 100 : 0;
   const percentPria = genderCapacity.Pria ? genderAttendance.Pria / genderCapacity.Pria * 100 : 0;
   const percentWanita = genderCapacity.Wanita ? genderAttendance.Wanita / genderCapacity.Wanita * 100 : 0;
-  const averageAttendance = totalMeetings ? totalAttendance / totalMeetings : 0;
+  const averageAttendance = totalMeetings ? Math.floor(totalAttendance / totalMeetings) : 0;
   const zeroAttendanceMembers = [...groupAttendanceCounts.values()]
     .flatMap((counts) => counts.zero)
     .sort((first, second) => first.group.localeCompare(second.group, "id")
@@ -2745,6 +2754,10 @@ attendanceTypeChanged();
 window.addEventListener("focus", () => {
   if (sharedSyncEnabled) refreshSharedData();
 });
+document.getElementById("dashboard-share-menu").classList.toggle(
+  "hidden",
+  !document.getElementById("page-dashboard").classList.contains("active")
+);
 renderDashboard();
 renderRiwayat();
 renderJamaah();

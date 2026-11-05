@@ -71,14 +71,15 @@
   <div class="workspace-content rounded-3xl border border-white/70 bg-white/55 shadow-2xl backdrop-blur-2xl">
     <header class="workspace-topbar" id="main-header">
       <div class="topbar-title"><span class="workspace-topbar-kicker">Ruang kerja</span><strong id="workspace-page-title">Dashboard</strong></div>
-      <label class="workspace-search">
-        <i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>
-        <input type="search" aria-label="Cari" placeholder="Cari menu atau data...">
-      </label>
+      <details class="dashboard-share-menu" id="dashboard-share-menu">
+        <summary class="btn-secondary dashboard-share-trigger"><i class="fa-solid fa-share-nodes" aria-hidden="true"></i><span>Share dashboard</span><i class="fa-solid fa-chevron-down share-chevron" aria-hidden="true"></i></summary>
+        <div class="dashboard-share-options">
+          <button type="button" onclick="chooseDashboardShare('pdf')"><i class="fa-solid fa-file-pdf" aria-hidden="true"></i>Share as PDF</button>
+          <button type="button" onclick="chooseDashboardShare('image')"><i class="fa-solid fa-image" aria-hidden="true"></i>Share as image</button>
+          <p id="dashboard-share-message" class="form-message" role="status" aria-live="polite"></p>
+        </div>
+      </details>
       <div class="topbar-actions">
-        <button class="notification-button" type="button" aria-label="Notifikasi">
-          <i class="fa-regular fa-bell" aria-hidden="true"></i><span class="notification-dot"></span>
-        </button>
         <div class="workspace-profile">
           <span class="profile-avatar"><i class="fa-solid fa-user"></i></span>
           <span id="current-user"></span>
@@ -89,12 +90,6 @@
 
 <!-- DASHBOARD -->
 <section id="page-dashboard" class="page">
-  <div class="dashboard-share-actions">
-    <button class="btn-secondary" type="button" onclick="shareDashboard('image')">Bagikan sebagai Gambar</button>
-    <button class="btn-secondary" type="button" onclick="shareDashboard('pdf')">Bagikan sebagai PDF</button>
-    <p id="dashboard-share-message" class="form-message" role="status" aria-live="polite"></p>
-  </div>
-
   <div id="dashboard-export">
   <div class="dashboard-heading">
     <div>
