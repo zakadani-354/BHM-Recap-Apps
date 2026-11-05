@@ -384,6 +384,17 @@ body:before{position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse
   .workspace-content{padding-right:20px;padding-left:20px}
   .workspace-topbar{grid-template-columns:minmax(120px,1fr) minmax(160px,250px) auto;gap:14px;margin-right:-20px;margin-left:-20px;padding-right:20px;padding-left:20px}
 }
+
+body.public-dashboard-mode #nav-presensi,
+body.public-dashboard-mode #nav-jamaah,
+body.public-dashboard-mode #nav-asisten,
+body.public-dashboard-mode #nav-admin,
+body.public-dashboard-mode .sidebar-workspace-label,
+body.public-dashboard-mode .sidebar-footer .btn-logout,
+body.public-dashboard-mode #page-presensi,
+body.public-dashboard-mode #page-jamaah,
+body.public-dashboard-mode #page-asisten,
+body.public-dashboard-mode #page-admin{display:none!important}
 @media(max-width:760px){
   .app-shell{display:block;padding:10px}
   .app-sidebar{position:relative;top:auto;width:100%;height:auto;min-height:0;margin-bottom:12px;padding:12px;border-radius:20px!important}

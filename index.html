@@ -17,6 +17,7 @@
     <p class="eyebrow">Yayasan Baitussalam Huda Mansurin</p>
     <h1>BHM Recap Apps</h1>
     <p class="login-copy">Sistem rekap presensi kelompok binaan</p>
+    <p id="public-dashboard-message" class="form-message error-message hidden" role="alert"></p>
     <form onsubmit="event.preventDefault(); doLogin();" class="login-form">
       <label for="name">Username</label>
       <input id="name" name="username" type="text" placeholder="Masukkan username" autocomplete="username" required>
@@ -57,8 +58,8 @@
 
       <p class="sidebar-section-label sidebar-workspace-label">Workspace</p>
       <a href="#presensi" id="nav-presensi" class="sidebar-link" onclick="showPage('presensi', true)"><i class="fa-solid fa-clipboard-check"></i><span>Input Presensi</span></a>
-      <a href="#jamaah" class="sidebar-link" onclick="showPage('jamaah', true)"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
-      <a href="#asisten" class="sidebar-link" onclick="showPage('asisten', true)"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
+      <a href="#jamaah" id="nav-jamaah" class="sidebar-link" onclick="showPage('jamaah', true)"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
+      <a href="#asisten" id="nav-asisten" class="sidebar-link" onclick="showPage('asisten', true)"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
       <a href="#admin" id="nav-admin" class="sidebar-link hidden" onclick="showPage('admin', true)"><i class="fa-solid fa-gear"></i><span>Pengaturan</span></a>
     </nav>
     <div class="sidebar-footer">

@@ -192,9 +192,13 @@ function saveMembers() {
 }
 
 async function requestSharedApi(action, data = {}, method = "POST") {
+  if (window.currentRole === "public"
+      && (method !== "GET" || action !== "public-dashboard")) {
+    throw new Error("Dashboard publik hanya dapat membaca data.");
+  }
   let response;
   try {
-    response = await fetch("/api", {
+    response = await fetch(action === "public-dashboard" ? "/api?public-dashboard=1" : "/api", {
       method,
       credentials: "same-origin",
       headers: method === "POST" ? { "Content-Type": "application/json" } : undefined,
@@ -368,6 +372,10 @@ function localDateString() {
 }
 
 function showPage(id, selectedFromSidebar = false) {
+  if (window.currentRole === "public" && id !== "dashboard") {
+    showPage("dashboard");
+    return;
+  }
   const target = document.getElementById(`page-${id}`);
   if (!target) throw new Error(`Halaman "${id}" tidak ditemukan.`);
   if (window.currentRole === "presensi" && id !== "presensi") {
@@ -654,6 +662,58 @@ async function autoLoginAttendanceLink() {
     error.textContent = `Tautan presensi tidak dapat digunakan: ${loginError.message}`;
     error.classList.remove("hidden");
   }
+}
+
+async function startPublicDashboard() {
+  const message = document.getElementById("public-dashboard-message");
+  document.querySelector("#view-login .login-form").classList.add("hidden");
+  document.querySelector("#view-login .login-copy").textContent = "Memuat dashboard presentasi...";
+  message.classList.remove("hidden");
+  message.classList.remove("error-message");
+  message.textContent = "Menghubungkan ke data dashboard...";
+  const state = await requestSharedApi("public-dashboard", {}, "GET");
+  if (!state.initialized || !Array.isArray(state.members) || !Array.isArray(state.attendance)) {
+    throw new Error("Server tidak mengirimkan data dashboard dengan format yang valid.");
+  }
+
+  window.currentRole = "public";
+  sharedSyncEnabled = false;
+  jamaahData = state.members.map((member) => {
+    const gender = normalizeGender(member.jenisKelamin || member.gender);
+    return {
+      ...member,
+      jenisKelamin: gender,
+      kategori: normalizeMemberCategory(member.kategori || member.kriteria, gender)
+    };
+  });
+  presensiData = state.attendance.map((record) => ({
+    ...record,
+    jenisPengajian: normalizeAttendanceType(record.jenisPengajian)
+  }));
+  sharedDataRevision = Number(state.revision || 0);
+  sharedTerobosanSummary = [];
+  currentDashboardType = DEFAULT_ATTENDANCE_TYPE;
+  activeSidebarSelection = "";
+  document.getElementById("f-group").value = "";
+  document.getElementById("f-bulan-mode").value = "month";
+  document.getElementById("f-bulan").value = "";
+  document.getElementById("f-bulan-mulai").value = "";
+  document.getElementById("f-bulan-sampai").value = "";
+  document.body.classList.add("public-dashboard-mode");
+  document.getElementById("view-login").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+  document.getElementById("current-user").textContent = "Mode publik · Hanya baca";
+  document.querySelector(".workspace-topbar-kicker").textContent = "Dashboard publik";
+  document.querySelectorAll(".sidebar-link").forEach((link) => {
+    link.classList.toggle("hidden", !link.dataset.attendanceType);
+  });
+  setSyncStatus("Dashboard publik · Hanya baca", "sync-online");
+  document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
+  document.getElementById("page-dashboard").classList.remove("hidden");
+  document.getElementById("workspace-page-title").textContent = currentDashboardType;
+  attendanceTypeChanged();
+  renderDashboard();
+  message.classList.add("hidden");
 }
 
 function finishLogin(username, role, shared) {
@@ -2688,8 +2748,18 @@ window.addEventListener("focus", () => {
 renderDashboard();
 renderRiwayat();
 renderJamaah();
-autoLoginAttendanceLink().catch((error) => {
+const publicDashboardRequested =
+  new URLSearchParams(window.location.search).get("public-dashboard") === "1";
+(publicDashboardRequested ? startPublicDashboard() : autoLoginAttendanceLink()).catch((error) => {
   console.error("Could not restore the active session.", error);
+  if (publicDashboardRequested) {
+    const message = document.getElementById("public-dashboard-message");
+    document.querySelector("#view-login .login-copy").textContent = "Dashboard publik tidak dapat dimuat.";
+    message.textContent = `Gagal memuat dashboard publik: ${error.message}`;
+    message.classList.remove("hidden");
+    message.classList.add("error-message");
+    return;
+  }
   const message = document.getElementById("login-error");
   message.textContent = `Sesi tidak dapat dipulihkan: ${error.message}`;
   message.classList.remove("hidden");

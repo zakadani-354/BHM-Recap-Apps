@@ -296,6 +296,45 @@ async function loadTerobosanEvents(config) {
   return rows;
 }
 
+function publicDashboardState(state, terobosanEvents) {
+  const memberIdMap = new Map();
+  const members = state.members.map((member, index) => {
+    const publicId = `public-member-${index + 1}`;
+    if (member.id && !memberIdMap.has(member.id)) memberIdMap.set(member.id, publicId);
+    return {
+      id: publicId,
+      nama: member.nama,
+      kelompok: member.kelompok,
+      jenisKelamin: member.jenisKelamin || member.gender,
+      kategori: member.kategori || member.kriteria,
+      peran: member.peran
+    };
+  });
+  const terobosanRecords = terobosanEvents.flatMap((event) =>
+    Array.isArray(event.attendance)
+      ? event.attendance.map((record) => ({
+        ...record,
+        tanggal: record.tanggal || event.event_date,
+        jenisPengajian: "Terobosan Pusat"
+      }))
+      : []);
+  const attendance = [...state.attendance, ...terobosanRecords].map((record) => ({
+    memberId: memberIdMap.get(record.memberId),
+    nama: record.nama,
+    kelompok: record.kelompok,
+    tanggal: record.tanggal,
+    jenisPengajian: record.jenisPengajian,
+    status: record.status,
+    jenisKelamin: record.jenisKelamin
+  }));
+  return {
+    initialized: true,
+    members,
+    attendance,
+    revision: Number(state.revision || 0)
+  };
+}
+
 async function saveCollection(config, collection, data) {
   const revision = await supabaseRequest(config, "rpc/bhm_save_app_collection", {
     method: "POST",
@@ -319,6 +358,20 @@ async function handle(req, res) {
   }
   if (req.method === "POST") ensureSameOrigin(req);
   const config = getConfig();
+  if (req.method === "GET"
+      && new URL(req.url || "/", "http://localhost").searchParams.get("public-dashboard") === "1") {
+    const [state, terobosanEvents] = await Promise.all([
+      loadSharedState(config),
+      loadTerobosanEvents(config)
+    ]);
+    if (!state.initialized) {
+      throw new ApiError(503, "PUBLIC_DASHBOARD_NOT_READY", "Dashboard publik belum tersedia karena data bersama belum diinisialisasi.");
+    }
+    json(res, 200, publicDashboardState(state, terobosanEvents), {
+      "Cache-Control": "no-store"
+    });
+    return;
+  }
   const session = verifySession(cookieValue(req, COOKIE_NAME), config.sessionSecret);
 
   if (req.method === "GET") {

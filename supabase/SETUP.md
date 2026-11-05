@@ -63,6 +63,22 @@ and redeploy to invalidate the link.
 This link requires the hosted API and shared Supabase database; it does not
 work when opening `index.html` directly from disk.
 
+## Public dashboard
+
+After deploying the app and initializing shared data, open or share
+`https://<your-app-domain>/?public-dashboard=1` for the read-only dashboard.
+It opens without login and includes the dashboards for all pengajian types,
+with group and date filters. Data is loaded from the shared Supabase database;
+the browser's local-only data is not included.
+
+This URL is public access, not a secret link. Anyone can open it, and the
+dashboard API returns the member and attendance fields needed to calculate its
+filters and summaries, including the names in the 0% attendance list. Do not
+enable this mode unless those dashboard details are approved for public
+viewing. The public route is read-only and does not expose account credentials
+or provide data-editing actions. To disable public access, remove the
+`public-dashboard` GET branch from `api/index.js` and redeploy.
+
 `Terobosan Pusat` is limited to one event date per calendar year across all
 groups and is stored in the dedicated `bhm_terobosan_events` table. Its
 attendance form and dashboard show present men and women separately. A name
