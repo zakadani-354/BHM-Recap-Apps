@@ -22,6 +22,7 @@ const ATTENDANCE_TYPES = [
 ];
 let currentDashboardType = DEFAULT_ATTENDANCE_TYPE;
 let activeSidebarSelection = "";
+let activePresensiTab = "input";
 const STORAGE_KEYS = {
   attendance: "bhm-recap-attendance",
   members: "bhm-recap-members",
@@ -401,7 +402,6 @@ function showPage(id, selectedFromSidebar = false) {
   updateDashboardTypeNavigation();
   updateActiveSession({ page: id });
   window.scrollTo(0, 0);
-  if (id === "presensi") renderRiwayat();
   if (id === "jamaah") renderJamaah();
 }
 
@@ -439,19 +439,25 @@ function selectDashboardType(type) {
   updateActiveSession({ attendanceType: currentDashboardType });
   showPage("dashboard");
   renderDashboard();
-  renderRiwayat();
 }
 
 function switchTab(tab) {
+  if (!["input", "riwayat", "detail-presensi"].includes(tab)) return;
+  if (activePresensiTab === tab) return;
+  activePresensiTab = tab;
   document.getElementById("tab-input").classList.toggle("hidden", tab !== "input");
   document.getElementById("tab-riwayat").classList.toggle("hidden", tab !== "riwayat");
   document.getElementById("tab-detail-presensi").classList.toggle("hidden", tab !== "detail-presensi");
   document.querySelectorAll("#page-presensi .tabs .tab").forEach((button, index) => {
     button.classList.toggle("active", ["input", "riwayat", "detail-presensi"][index] === tab);
   });
-  if (tab === "riwayat") renderRiwayat();
-  if (tab === "detail-presensi") renderAttendanceSummary();
   updateActiveSession({ presensiTab: tab });
+  requestAnimationFrame(() => {
+    if (activePresensiTab === tab) {
+      if (tab === "riwayat") renderRiwayat();
+      if (tab === "detail-presensi") renderAttendanceSummary();
+    }
+  });
 }
 
 function setAttendanceMode(mode) {
@@ -568,10 +574,10 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   } else {
     document.getElementById("jamaah-satuan").classList.remove("hidden");
   }
-  const activePresensiTab = window.currentRole === "presensi"
+  const tabToOpen = window.currentRole === "presensi"
     ? "input"
     : ["input", "riwayat", "detail-presensi"].includes(presensiTab) ? presensiTab : "input";
-  switchTab(activePresensiTab);
+  switchTab(tabToOpen);
   setAttendanceMode(attendanceMode === "massal" ? "massal" : "satuan");
   switchJamaahTab(jamaahTab === "file" ? "file" : "satuan");
   showPage(isAttendanceOnly ? "presensi" : page === "admin" && !isAdmin ? "dashboard" : page);
@@ -1608,6 +1614,10 @@ function updateTerobosanAttendanceCounts() {
 }
 
 function renderRiwayat() {
+  if (activePresensiTab !== "riwayat") {
+    if (activePresensiTab === "detail-presensi") renderAttendanceSummary();
+    return;
+  }
   const group = document.getElementById("r-kelompok").value;
   const type = document.getElementById("r-jenis").value;
   const records = presensiData
@@ -1631,7 +1641,6 @@ function renderRiwayat() {
   document.getElementById("riwayat-select-all").checked = false;
   document.getElementById("riwayat-select-all").indeterminate = false;
   updateAttendanceSelection();
-  renderAttendanceSummary();
 }
 
 function historyAttendanceSummaries() {
@@ -1641,6 +1650,13 @@ function historyAttendanceSummaries() {
   const startDate = `${year}-01-01`;
   const endDate = localDateString();
   const meetingsByKey = new Map();
+  const memberById = new Map();
+  const memberByNameAndGroup = new Map();
+  jamaahData.forEach((member) => {
+    if (!memberById.has(member.id)) memberById.set(member.id, member);
+    const identity = `${normalizeNameForMatch(member.nama)}\u0000${normalizeGroupForMatch(member.kelompok)}`;
+    if (!memberByNameAndGroup.has(identity)) memberByNameAndGroup.set(identity, member);
+  });
   presensiData.forEach((record) => {
     const recordType = dashboardAttendanceType(record);
     if ((!group || record.kelompok === group)
@@ -1655,27 +1671,38 @@ function historyAttendanceSummaries() {
           group: record.kelompok,
           type: recordType,
           date: record.tanggal,
-          records: []
+          attendanceByMember: new Map()
         });
       }
-      meetingsByKey.get(key).records.push(record);
+      const member = memberById.get(record.memberId)
+        || memberByNameAndGroup.get(
+          `${normalizeNameForMatch(record.nama)}\u0000${normalizeGroupForMatch(record.kelompok)}`
+        );
+      if (member && isEligibleMemberForType(member, recordType)) {
+        const attendances = meetingsByKey.get(key).attendanceByMember;
+        if (!attendances.has(member.id)) attendances.set(member.id, record);
+      }
     }
   });
-  const meetings = [...meetingsByKey.values()]
-    .sort((first, second) => first.date.localeCompare(second.date)
-      || first.type.localeCompare(second.type, "id"));
+  const meetingsByGroup = new Map();
+  meetingsByKey.forEach((meeting) => {
+    if (!meetingsByGroup.has(meeting.group)) meetingsByGroup.set(meeting.group, []);
+    meetingsByGroup.get(meeting.group).push(meeting);
+  });
+  meetingsByGroup.forEach((meetings) => meetings.sort((first, second) =>
+    first.date.localeCompare(second.date) || first.type.localeCompare(second.type, "id")
+  ));
   const members = jamaahData
     .filter((member) => (!group || member.kelompok === group)
       && (!type || isEligibleMemberForType(member, type)))
     .sort((first, second) => first.kelompok.localeCompare(second.kelompok, "id")
       || first.nama.localeCompare(second.nama, "id"));
   return members.map((member) => {
-    const memberMeetings = meetings
-      .filter((meeting) => meeting.group === member.kelompok
-        && (!type || isEligibleMemberForType(member, meeting.type)))
+    const memberMeetings = (meetingsByGroup.get(member.kelompok) || [])
+      .filter((meeting) => !type || isEligibleMemberForType(member, meeting.type))
       .map((meeting) => ({
         ...meeting,
-        attendance: meeting.records.find((record) => attendanceBelongsToMember(record, member)) || null
+        attendance: meeting.attendanceByMember.get(member.id) || null
       }));
     const present = memberMeetings.filter(({ attendance }) => attendance?.status === "Hadir").length;
     return {
