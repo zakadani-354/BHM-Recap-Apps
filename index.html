@@ -57,6 +57,8 @@
         onclick="selectDashboardType('Terobosan Pusat')"><i class="fa-solid fa-star-and-crescent"></i><span>Terobosan Pusat</span></button>
 
       <p class="sidebar-section-label sidebar-workspace-label">Workspace</p>
+      <a href="#public-attendance" id="nav-public-attendance" class="sidebar-link hidden"
+        onclick="showPage('public-attendance', true)"><i class="fa-solid fa-chart-pie"></i><span>Tingkat Kehadiran Jamaah</span></a>
       <a href="#presensi" id="nav-presensi" class="sidebar-link" onclick="showPage('presensi', true)"><i class="fa-solid fa-clipboard-check"></i><span>Input Presensi</span></a>
       <a href="#jamaah" id="nav-jamaah" class="sidebar-link" onclick="showPage('jamaah', true)"><i class="fa-solid fa-users"></i><span>Data Jamaah</span></a>
       <a href="#asisten" id="nav-asisten" class="sidebar-link" onclick="showPage('asisten', true)"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Asisten AI</span></a>
@@ -367,6 +369,39 @@
     <table class="data-table">
       <thead><tr><th>Kelompok</th><th>Nama</th><th>Tingkat Kehadiran</th><th>Detail</th></tr></thead>
       <tbody id="attendance-summary-table"></tbody>
+    </table>
+  </div>
+</section>
+
+<section id="page-public-attendance" class="page hidden">
+  <div class="dashboard-heading">
+    <div>
+      <p class="dashboard-eyebrow">Dashboard presentasi</p>
+      <h1>Tingkat Kehadiran Jamaah</h1>
+      <span class="subtitle">Rincian kehadiran jamaah sejak Januari hingga hari ini.</span>
+    </div>
+  </div>
+  <div class="filter-row dashboard-filters" aria-label="Filter tingkat kehadiran jamaah">
+    <label for="public-attendance-group"><span>Kelompok</span>
+      <select id="public-attendance-group" onchange="renderPublicAttendanceSummary()">
+        <option value="">Semua kelompok</option>
+        <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+        <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+      </select>
+    </label>
+    <label for="public-attendance-type"><span>Jenis Pengajian</span>
+      <select id="public-attendance-type" onchange="renderPublicAttendanceSummary()">
+        <option value="">Semua jenis</option>
+        <option>Pengajian Umum</option><option>Pengajian Pengurus</option>
+        <option>Pengajian Ibu-Ibu Desa</option><option>ASAD Wanita</option><option>Pengajian Lansia</option>
+        <option>Terobosan Pusat</option>
+      </select>
+    </label>
+  </div>
+  <div class="table-scroll">
+    <table class="data-table">
+      <thead><tr><th>Kelompok</th><th>Nama</th><th>Tingkat Kehadiran</th><th>Detail</th></tr></thead>
+      <tbody id="public-attendance-summary-table"></tbody>
     </table>
   </div>
 </section>

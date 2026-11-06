@@ -373,7 +373,11 @@ function localDateString() {
 }
 
 function showPage(id, selectedFromSidebar = false) {
-  if (window.currentRole === "public" && id !== "dashboard") {
+  if (window.currentRole === "public" && !["dashboard", "public-attendance"].includes(id)) {
+    showPage("dashboard");
+    return;
+  }
+  if (id === "public-attendance" && window.currentRole !== "public") {
     showPage("dashboard");
     return;
   }
@@ -393,6 +397,7 @@ function showPage(id, selectedFromSidebar = false) {
   target.classList.remove("hidden");
   const pageTitles = {
     dashboard: currentDashboardType,
+    "public-attendance": "Tingkat Kehadiran Jamaah",
     presensi: "Input Presensi",
     jamaah: "Data Jamaah",
     asisten: "Asisten AI",
@@ -403,6 +408,7 @@ function showPage(id, selectedFromSidebar = false) {
   updateActiveSession({ page: id });
   window.scrollTo(0, 0);
   if (id === "jamaah") renderJamaah();
+  if (id === "public-attendance") renderPublicAttendanceSummary();
 }
 
 function updateDashboardTypeNavigation() {
@@ -428,6 +434,9 @@ function selectDashboardType(type) {
     return;
   }
   currentDashboardType = type;
+  if (window.currentRole === "public") {
+    document.getElementById("public-attendance-type").value = type;
+  }
   activeSidebarSelection = `type:${type}`;
   const typeSelect = document.getElementById("p-jenis-pengajian");
   typeSelect.value = type;
@@ -712,14 +721,19 @@ async function startPublicDashboard() {
   document.getElementById("f-bulan").value = "";
   document.getElementById("f-bulan-mulai").value = "";
   document.getElementById("f-bulan-sampai").value = "";
+  document.getElementById("public-attendance-type").value = currentDashboardType;
   document.body.classList.add("public-dashboard-mode");
   document.getElementById("view-login").classList.add("hidden");
   document.getElementById("app").classList.remove("hidden");
   document.getElementById("current-user").textContent = "Mode publik · Hanya baca";
   document.querySelector(".workspace-topbar-kicker").textContent = "Dashboard publik";
   document.querySelectorAll(".sidebar-link").forEach((link) => {
-    link.classList.toggle("hidden", !link.dataset.attendanceType);
+    link.classList.toggle(
+      "hidden",
+      !link.dataset.attendanceType && link.id !== "nav-public-attendance"
+    );
   });
+  document.getElementById("nav-public-attendance").classList.remove("hidden");
   setSyncStatus("Dashboard publik · Hanya baca", "sync-online");
   document.querySelectorAll(".page").forEach((page) => page.classList.add("hidden"));
   document.getElementById("page-dashboard").classList.remove("hidden");
@@ -1643,9 +1657,7 @@ function renderRiwayat() {
   updateAttendanceSelection();
 }
 
-function historyAttendanceSummaries() {
-  const group = document.getElementById("d-kelompok").value;
-  const type = document.getElementById("d-jenis").value;
+function historyAttendanceSummaries(group, type) {
   const year = new Date().getFullYear();
   const startDate = `${year}-01-01`;
   const endDate = localDateString();
@@ -1715,9 +1727,17 @@ function historyAttendanceSummaries() {
   });
 }
 
-function renderAttendanceSummary() {
-  const summaries = historyAttendanceSummaries();
-  document.getElementById("attendance-summary-table").innerHTML = summaries.map((summary) => `
+function attendanceSummaryFilters(isPublic) {
+  return {
+    group: document.getElementById(isPublic ? "public-attendance-group" : "d-kelompok").value,
+    type: document.getElementById(isPublic ? "public-attendance-type" : "d-jenis").value
+  };
+}
+
+function renderAttendanceSummaryTable(tableId, isPublic) {
+  const { group, type } = attendanceSummaryFilters(isPublic);
+  const summaries = historyAttendanceSummaries(group, type);
+  document.getElementById(tableId).innerHTML = summaries.map((summary) => `
     <tr>
       <td>${escapeHtml(summary.member.kelompok)}</td>
       <td>${escapeHtml(summary.member.nama)}</td>
@@ -1725,13 +1745,24 @@ function renderAttendanceSummary() {
       <td><button class="btn-secondary member-attendance-detail"
         data-member-id="${escapeHtml(summary.member.id)}" type="button">Lihat detail</button></td>
     </tr>`).join("") || '<tr><td colspan="4">Tidak ada jamaah yang sesuai filter.</td></tr>';
-  document.querySelectorAll(".member-attendance-detail").forEach((button) => {
-    button.addEventListener("click", () => showMemberAttendanceDetails(button.dataset.memberId));
+  document.querySelectorAll(`#${tableId} .member-attendance-detail`).forEach((button) => {
+    button.addEventListener("click", () =>
+      showMemberAttendanceDetails(button.dataset.memberId, isPublic));
   });
 }
 
-function showMemberAttendanceDetails(memberId) {
-  const summary = historyAttendanceSummaries().find(({ member }) => member.id === memberId);
+function renderAttendanceSummary() {
+  renderAttendanceSummaryTable("attendance-summary-table", false);
+}
+
+function renderPublicAttendanceSummary() {
+  renderAttendanceSummaryTable("public-attendance-summary-table", true);
+}
+
+function showMemberAttendanceDetails(memberId, isPublic = false) {
+  const { group, type } = attendanceSummaryFilters(isPublic);
+  const summary = historyAttendanceSummaries(group, type)
+    .find(({ member }) => member.id === memberId);
   if (!summary) {
     alert("Data jamaah tidak ditemukan. Muat ulang riwayat lalu coba lagi.");
     return;
@@ -1763,7 +1794,8 @@ function exportAttendanceSummaryXlsx() {
     alert("Pustaka XLSX tidak tersedia. Periksa koneksi internet lalu muat ulang.");
     return;
   }
-  const summaries = historyAttendanceSummaries();
+  const { group, type } = attendanceSummaryFilters(false);
+  const summaries = historyAttendanceSummaries(group, type);
   if (!summaries.length) {
     alert("Tidak ada data jamaah yang dapat diekspor sesuai filter.");
     return;
@@ -1780,8 +1812,6 @@ function exportAttendanceSummaryXlsx() {
     worksheet["!cols"] = [{ wch: 22 }, { wch: 30 }, { wch: 24 }];
     const workbook = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(workbook, worksheet, "Kehadiran");
-    const group = document.getElementById("d-kelompok").value;
-    const type = document.getElementById("d-jenis").value;
     const suffix = [type, group]
       .filter(Boolean)
       .map((value) => value.replace(/[^\w-]+/g, "-").toLowerCase())
