@@ -325,6 +325,7 @@
         </select>
       </label>
       <button class="btn-secondary" onclick="exportRiwayat()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
+      <button class="btn-secondary" onclick="exportAttendanceSummaryXlsx()"><i class="fa-solid fa-file-excel"></i> Export XLSX Kehadiran</button>
     </div>
     <div class="history-actions">
       <button id="delete-selected-attendance" class="table-action" type="button"
@@ -339,8 +340,22 @@
       </tr></thead>
       <tbody id="riwayat-table"></tbody>
     </table>
+    <h2 class="attendance-summary-heading">Tingkat Kehadiran Jamaah</h2>
+    <p class="section-help">Persentase dihitung dari pertemuan yang tercatat sejak Januari hingga hari ini, mengikuti filter kelompok dan jenis pengajian.</p>
+    <table class="data-table">
+      <thead><tr><th>Kelompok</th><th>Nama</th><th>Tingkat Kehadiran</th><th>Detail</th></tr></thead>
+      <tbody id="attendance-summary-table"></tbody>
+    </table>
   </div>
 </section>
+
+<dialog id="member-attendance-dialog" class="dashboard-detail-dialog" aria-labelledby="member-attendance-title">
+  <div class="dashboard-detail-heading">
+    <h2 id="member-attendance-title">Detail Kehadiran Jamaah</h2>
+    <button class="btn-secondary" type="button" onclick="closeMemberAttendanceDetails()">Tutup</button>
+  </div>
+  <div id="member-attendance-content"></div>
+</dialog>
 
 <!-- DATA JAMAAH -->
 <section id="page-jamaah" class="page hidden">

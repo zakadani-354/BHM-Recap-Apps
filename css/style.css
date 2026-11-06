@@ -72,6 +72,8 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
   .assistant-card{padding:17px 14px}
 }
 .history-actions{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.attendance-summary-heading{margin:28px 0 6px;color:var(--brand);font-size:19px}
+.member-attendance-detail{min-height:34px;padding:6px 12px}
 .history-actions .form-message{margin:0}
 .attendance-row-select,#riwayat-select-all{width:20px;height:20px;accent-color:var(--brand);cursor:pointer}
 .member-row-select,#jamaah-select-all{width:20px;height:20px;accent-color:var(--brand);cursor:pointer}

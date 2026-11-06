@@ -817,15 +817,19 @@ function isDashboardMemberRecord(record, memberLookup) {
 }
 
 function isEligibleDashboardMember(member) {
+  return isEligibleMemberForType(member, currentDashboardType);
+}
+
+function isEligibleMemberForType(member, type) {
   if (!member) return false;
-  if (currentDashboardType === "Pengajian Pengurus") return member.peran === "Pengurus";
-  if (currentDashboardType === "Pengajian Ibu-Ibu Desa")
+  if (type === "Pengajian Pengurus") return member.peran === "Pengurus";
+  if (type === "Pengajian Ibu-Ibu Desa")
     return member.jenisKelamin === "Wanita"
       && ["Ibu", "Lansia"].includes(member.kategori);
-  if (currentDashboardType === "ASAD Wanita")
+  if (type === "ASAD Wanita")
     return member.jenisKelamin === "Wanita"
       && ["Ibu", "Generus"].includes(member.kategori);
-  if (currentDashboardType === "Pengajian Lansia") return member.kategori === "Lansia";
+  if (type === "Pengajian Lansia") return member.kategori === "Lansia";
   return true;
 }
 
@@ -1621,6 +1625,142 @@ function renderRiwayat() {
   document.getElementById("riwayat-select-all").checked = false;
   document.getElementById("riwayat-select-all").indeterminate = false;
   updateAttendanceSelection();
+  renderAttendanceSummary();
+}
+
+function historyAttendanceSummaries() {
+  const group = document.getElementById("r-kelompok").value;
+  const type = document.getElementById("r-jenis").value;
+  const year = new Date().getFullYear();
+  const startDate = `${year}-01-01`;
+  const endDate = localDateString();
+  const meetingsByKey = new Map();
+  presensiData.forEach((record) => {
+    const recordType = dashboardAttendanceType(record);
+    if ((!group || record.kelompok === group)
+        && (!type || recordType === type)
+        && /^\d{4}-\d{2}-\d{2}$/.test(record.tanggal)
+        && record.tanggal >= startDate
+        && record.tanggal <= endDate
+        && (recordType !== DEFAULT_ATTENDANCE_TYPE || isFridayAttendance(record))) {
+      const key = `${record.kelompok}\u0000${recordType}\u0000${record.tanggal}`;
+      if (!meetingsByKey.has(key)) {
+        meetingsByKey.set(key, {
+          group: record.kelompok,
+          type: recordType,
+          date: record.tanggal,
+          records: []
+        });
+      }
+      meetingsByKey.get(key).records.push(record);
+    }
+  });
+  const meetings = [...meetingsByKey.values()]
+    .sort((first, second) => first.date.localeCompare(second.date)
+      || first.type.localeCompare(second.type, "id"));
+  const members = jamaahData
+    .filter((member) => (!group || member.kelompok === group)
+      && (!type || isEligibleMemberForType(member, type)))
+    .sort((first, second) => first.kelompok.localeCompare(second.kelompok, "id")
+      || first.nama.localeCompare(second.nama, "id"));
+  return members.map((member) => {
+    const memberMeetings = meetings
+      .filter((meeting) => meeting.group === member.kelompok
+        && (!type || isEligibleMemberForType(member, meeting.type)))
+      .map((meeting) => ({
+        ...meeting,
+        attendance: meeting.records.find((record) => attendanceBelongsToMember(record, member)) || null
+      }));
+    const present = memberMeetings.filter(({ attendance }) => attendance?.status === "Hadir").length;
+    return {
+      member,
+      meetings: memberMeetings,
+      present,
+      total: memberMeetings.length,
+      percentage: memberMeetings.length ? Math.round((present / memberMeetings.length) * 100) : 0
+    };
+  });
+}
+
+function renderAttendanceSummary() {
+  const summaries = historyAttendanceSummaries();
+  document.getElementById("attendance-summary-table").innerHTML = summaries.map((summary) => `
+    <tr>
+      <td>${escapeHtml(summary.member.kelompok)}</td>
+      <td>${escapeHtml(summary.member.nama)}</td>
+      <td>${summary.percentage}%</td>
+      <td><button class="btn-secondary member-attendance-detail"
+        data-member-id="${escapeHtml(summary.member.id)}" type="button">Lihat detail</button></td>
+    </tr>`).join("") || '<tr><td colspan="4">Tidak ada jamaah yang sesuai filter.</td></tr>';
+  document.querySelectorAll(".member-attendance-detail").forEach((button) => {
+    button.addEventListener("click", () => showMemberAttendanceDetails(button.dataset.memberId));
+  });
+}
+
+function showMemberAttendanceDetails(memberId) {
+  const summary = historyAttendanceSummaries().find(({ member }) => member.id === memberId);
+  if (!summary) {
+    alert("Data jamaah tidak ditemukan. Muat ulang riwayat lalu coba lagi.");
+    return;
+  }
+  document.getElementById("member-attendance-title").textContent =
+    `${summary.member.nama} · ${summary.percentage}%`;
+  const period = `Januari–${new Date().toLocaleDateString("id-ID", { month: "long" })} ${new Date().getFullYear()}`;
+  const meetingRows = summary.meetings.map((meeting) => `
+    <tr>
+      <td>${escapeHtml(meeting.date)}</td>
+      <td>${escapeHtml(meeting.type)}</td>
+      <td>${escapeHtml(meeting.attendance?.status || "Alpa")}${meeting.attendance ? "" : " (otomatis)"}</td>
+    </tr>`).join("");
+  document.getElementById("member-attendance-content").innerHTML = `
+    <p class="section-help">${escapeHtml(summary.member.kelompok)} · ${period} · Hadir ${summary.present} dari ${summary.total} pertemuan</p>
+    <table class="data-table">
+      <thead><tr><th>Tanggal</th><th>Jenis Pengajian</th><th>Status</th></tr></thead>
+      <tbody>${meetingRows || '<tr><td colspan="3">Belum ada pertemuan pada periode ini.</td></tr>'}</tbody>
+    </table>`;
+  document.getElementById("member-attendance-dialog").showModal();
+}
+
+function closeMemberAttendanceDetails() {
+  document.getElementById("member-attendance-dialog").close();
+}
+
+function exportAttendanceSummaryXlsx() {
+  if (!window.XLSX) {
+    alert("Pustaka XLSX tidak tersedia. Periksa koneksi internet lalu muat ulang.");
+    return;
+  }
+  const summaries = historyAttendanceSummaries();
+  if (!summaries.length) {
+    alert("Tidak ada data jamaah yang dapat diekspor sesuai filter.");
+    return;
+  }
+  const rows = [
+    ["Kelompok", "Nama", "Tingkat kehadiran (dalam %)"],
+    ...summaries.map(({ member, percentage }) => [member.kelompok, member.nama, percentage / 100])
+  ];
+  try {
+    const worksheet = window.XLSX.utils.aoa_to_sheet(rows);
+    for (let row = 2; row <= rows.length; row += 1) {
+      worksheet[`C${row}`].z = "0%";
+    }
+    worksheet["!cols"] = [{ wch: 22 }, { wch: 30 }, { wch: 24 }];
+    const workbook = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(workbook, worksheet, "Kehadiran");
+    const group = document.getElementById("r-kelompok").value;
+    const type = document.getElementById("r-jenis").value;
+    const suffix = [type, group]
+      .filter(Boolean)
+      .map((value) => value.replace(/[^\w-]+/g, "-").toLowerCase())
+      .join("-");
+    window.XLSX.writeFile(
+      workbook,
+      `tingkat-kehadiran-${new Date().getFullYear()}${suffix ? `-${suffix}` : ""}.xlsx`
+    );
+  } catch (error) {
+    console.error("Could not export attendance summary to XLSX.", error);
+    alert(`Gagal membuat file XLSX: ${error.message}`);
+  }
 }
 
 function updateAttendanceSelection() {
