@@ -432,6 +432,7 @@ function selectDashboardType(type) {
   const typeSelect = document.getElementById("p-jenis-pengajian");
   typeSelect.value = type;
   document.getElementById("r-jenis").value = type;
+  document.getElementById("d-jenis").value = type;
   attendanceTypeChanged();
   document.getElementById("workspace-page-title").textContent = type;
   updateDashboardTypeNavigation();
@@ -444,10 +445,12 @@ function selectDashboardType(type) {
 function switchTab(tab) {
   document.getElementById("tab-input").classList.toggle("hidden", tab !== "input");
   document.getElementById("tab-riwayat").classList.toggle("hidden", tab !== "riwayat");
+  document.getElementById("tab-detail-presensi").classList.toggle("hidden", tab !== "detail-presensi");
   document.querySelectorAll("#page-presensi .tabs .tab").forEach((button, index) => {
-    button.classList.toggle("active", (index === 0) === (tab === "input"));
+    button.classList.toggle("active", ["input", "riwayat", "detail-presensi"][index] === tab);
   });
   if (tab === "riwayat") renderRiwayat();
+  if (tab === "detail-presensi") renderAttendanceSummary();
   updateActiveSession({ presensiTab: tab });
 }
 
@@ -565,7 +568,10 @@ function openApp(username, role, page = "dashboard", presensiTab = "input", jama
   } else {
     document.getElementById("jamaah-satuan").classList.remove("hidden");
   }
-  switchTab(presensiTab === "riwayat" ? "riwayat" : "input");
+  const activePresensiTab = window.currentRole === "presensi"
+    ? "input"
+    : ["input", "riwayat", "detail-presensi"].includes(presensiTab) ? presensiTab : "input";
+  switchTab(activePresensiTab);
   setAttendanceMode(attendanceMode === "massal" ? "massal" : "satuan");
   switchJamaahTab(jamaahTab === "file" ? "file" : "satuan");
   showPage(isAttendanceOnly ? "presensi" : page === "admin" && !isAdmin ? "dashboard" : page);
@@ -1629,8 +1635,8 @@ function renderRiwayat() {
 }
 
 function historyAttendanceSummaries() {
-  const group = document.getElementById("r-kelompok").value;
-  const type = document.getElementById("r-jenis").value;
+  const group = document.getElementById("d-kelompok").value;
+  const type = document.getElementById("d-jenis").value;
   const year = new Date().getFullYear();
   const startDate = `${year}-01-01`;
   const endDate = localDateString();
@@ -1747,8 +1753,8 @@ function exportAttendanceSummaryXlsx() {
     worksheet["!cols"] = [{ wch: 22 }, { wch: 30 }, { wch: 24 }];
     const workbook = window.XLSX.utils.book_new();
     window.XLSX.utils.book_append_sheet(workbook, worksheet, "Kehadiran");
-    const group = document.getElementById("r-kelompok").value;
-    const type = document.getElementById("r-jenis").value;
+    const group = document.getElementById("d-kelompok").value;
+    const type = document.getElementById("d-jenis").value;
     const suffix = [type, group]
       .filter(Boolean)
       .map((value) => value.replace(/[^\w-]+/g, "-").toLowerCase())

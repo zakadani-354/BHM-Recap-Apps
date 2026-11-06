@@ -194,6 +194,7 @@
   <div class="tabs">
     <button class="tab active" onclick="switchTab('input')">Form Input</button>
     <button class="tab" onclick="switchTab('riwayat')">Riwayat Input</button>
+    <button class="tab" onclick="switchTab('detail-presensi')">Detail Presensi Jamaah</button>
   </div>
 
   <div id="tab-input">
@@ -325,7 +326,6 @@
         </select>
       </label>
       <button class="btn-secondary" onclick="exportRiwayat()"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
-      <button class="btn-secondary" onclick="exportAttendanceSummaryXlsx()"><i class="fa-solid fa-file-excel"></i> Export XLSX Kehadiran</button>
     </div>
     <div class="history-actions">
       <button id="delete-selected-attendance" class="table-action" type="button"
@@ -340,8 +340,30 @@
       </tr></thead>
       <tbody id="riwayat-table"></tbody>
     </table>
+  </div>
+
+  <div id="tab-detail-presensi" class="hidden">
+    <h2>Detail Presensi Jamaah</h2>
+    <div class="filter-row">
+      <label>Kelompok:
+        <select id="d-kelompok" onchange="renderAttendanceSummary()">
+          <option value="">Semua</option>
+          <option>Baitu Taqwa</option><option>Almansurin</option><option>Al Huda</option>
+          <option>Al Malik</option><option>Miftahul Jannah</option><option>Baitul Makmur</option>
+        </select>
+      </label>
+      <label>Jenis Pengajian:
+        <select id="d-jenis" onchange="renderAttendanceSummary()">
+          <option value="">Semua jenis</option>
+          <option>Pengajian Umum</option><option>Pengajian Pengurus</option>
+          <option>Pengajian Ibu-Ibu Desa</option><option>ASAD Wanita</option><option>Pengajian Lansia</option>
+          <option>Terobosan Pusat</option>
+        </select>
+      </label>
+      <button class="btn-secondary" onclick="exportAttendanceSummaryXlsx()"><i class="fa-solid fa-file-excel"></i> Export XLSX Kehadiran</button>
+    </div>
     <h2 class="attendance-summary-heading">Tingkat Kehadiran Jamaah</h2>
-    <p class="section-help">Persentase dihitung dari pertemuan yang tercatat sejak Januari hingga hari ini, mengikuti filter kelompok dan jenis pengajian.</p>
+    <p class="section-help">Persentase dihitung dari pertemuan yang tercatat sejak Januari hingga hari ini, mengikuti filter di atas.</p>
     <table class="data-table">
       <thead><tr><th>Kelompok</th><th>Nama</th><th>Tingkat Kehadiran</th><th>Detail</th></tr></thead>
       <tbody id="attendance-summary-table"></tbody>
