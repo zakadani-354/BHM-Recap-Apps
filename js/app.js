@@ -1031,27 +1031,6 @@ function dashboardGroupColor(group) {
   return colors[GROUPS.indexOf(group) % colors.length] || colors[0];
 }
 
-function showDashboardDetails(type) {
-  const title = type === "zero" ? "Tingkat Kehadiran 0%" : "Tingkat Kehadiran 100%";
-  const dialog = document.getElementById("dashboard-detail-dialog");
-  document.getElementById("dashboard-detail-title").textContent = title;
-  const sections = [...(dashboardAttendanceDetails[type] || new Map()).entries()];
-  document.getElementById("dashboard-detail-content").innerHTML = sections.map(([group, names]) => `
-    <section class="dashboard-detail-group">
-      <h3>${escapeHtml(group)} <span>(${names.length})</span></h3>
-      ${names.length
-    ? `<ul class="dashboard-member-list">${names.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}</ul>`
-    : '<p class="section-help">Tidak ada jamaah.</p>'}
-    </section>`).join("");
-  dialog.showModal();
-}
-
-function closeDashboardDetails() {
-  document.getElementById("dashboard-detail-dialog").close();
-}
-
-let dashboardAttendanceDetails = { zero: new Map(), full: new Map() };
-
 function scrollToZeroAttendance() {
   document.getElementById("zero-attendance-title").scrollIntoView({
     behavior: "smooth",
@@ -1308,7 +1287,7 @@ function renderDashboard() {
       genderAttendance[member.jenisKelamin] += memberAttendance.get(member.id)?.size || 0;
     }
   });
-  const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [], full: [] }]));
+  const groupAttendanceCounts = new Map(GROUPS.map((group) => [group, { zero: [] }]));
   const meetingDatesByGroup = new Map(GROUPS.map((group) => [
     group,
     (() => {
@@ -1328,7 +1307,6 @@ function renderDashboard() {
     if (presentMeetings === 0) {
       counts.zero.push({ name: member.nama, group: member.kelompok });
     }
-    if (presentMeetings === groupMeetingDates.size) counts.full.push(member.nama);
   });
   const formatMonth = (month) => {
     const [year, monthNumber] = month.split("-").map(Number);
@@ -1357,18 +1335,6 @@ function renderDashboard() {
     .sort((first, second) => first.group.localeCompare(second.group, "id")
       || first.name.localeCompare(second.name, "id"));
   const zeroAttendanceCount = zeroAttendanceMembers.length;
-  const fullAttendanceCount = [...groupAttendanceCounts.values()]
-    .reduce((total, counts) => total + counts.full.length, 0);
-  dashboardAttendanceDetails = {
-    zero: new Map([...groupAttendanceCounts].map(([group, counts]) => [
-      group,
-      counts.zero.map(({ name }) => name).sort((first, second) => first.localeCompare(second, "id"))
-    ])),
-    full: new Map([...groupAttendanceCounts].map(([group, counts]) => [
-      group,
-      [...counts.full].sort((first, second) => first.localeCompare(second, "id"))
-    ]))
-  };
   const formatPercentage = (value) => `${value.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%`;
   const groupScopeLabel = selectedGroup ? "Kelompok Terpilih" : "Seluruh Kelompok";
 
@@ -1379,8 +1345,7 @@ function renderDashboard() {
     { title: "Kehadiran Wanita", value: formatPercentage(percentWanita), meta: `${genderMemberTotals.Wanita} peserta wanita`, type: "percent", icon: "fa-person-dress" },
     { title: "Kehadiran Laki-laki", value: formatPercentage(percentPria), meta: `${genderMemberTotals.Pria} peserta laki-laki`, type: "percent", icon: "fa-person" },
     { title: "Rerata Kehadiran per Pertemuan", value: `${averageAttendance.toLocaleString("id-ID", { maximumFractionDigits: 1 })} orang`, meta: `${formatPercentage(attendanceRate)} dari kapasitas peserta`, type: "average", icon: "fa-people-group" },
-    { title: "Kehadiran 0%", value: zeroAttendanceCount, meta: "Peserta tanpa kehadiran pada periode ini", type: "zero", icon: "fa-user-slash" },
-    { title: "Kehadiran 100%", value: fullAttendanceCount, meta: "Peserta hadir di setiap pertemuan", type: "full", icon: "fa-user-check" }
+    { title: "Kehadiran 0%", value: zeroAttendanceCount, meta: "Peserta tanpa kehadiran pada periode ini", type: "zero", icon: "fa-user-slash" }
   ];
   let dashboardCards = standardCards;
   if (currentDashboardType === "Pengajian Pengurus") {
@@ -1413,8 +1378,8 @@ function renderDashboard() {
       <h3>${escapeHtml(title)}</h3>
       <p class="value">${escapeHtml(value)}</p>
       <p class="meta">${escapeHtml(meta)}</p>
-      ${type === "zero" || type === "full"
-    ? `<button class="btn-secondary dashboard-detail-button" type="button" onclick="${type === "zero" ? "scrollToZeroAttendance()" : `showDashboardDetails('${type}')`}" ${value ? "" : "disabled"}>Rincian</button>`
+      ${type === "zero"
+    ? `<button class="btn-secondary dashboard-detail-button" type="button" onclick="scrollToZeroAttendance()" ${value ? "" : "disabled"}>Rincian</button>`
     : ""}
     </article>`).join("");
   document.querySelector(".zero-attendance-panel").classList.toggle(

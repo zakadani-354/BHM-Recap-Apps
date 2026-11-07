@@ -14,10 +14,6 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
 .dashboard-detail-dialog::backdrop{background:rgba(15,23,42,.5)}
 .dashboard-detail-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
 .dashboard-detail-heading h2{color:var(--brand);font-size:19px}
-.dashboard-detail-group{padding:12px 0;border-top:1px solid var(--border)}
-.dashboard-detail-group h3{font-size:15px;color:var(--text)}
-.dashboard-detail-group h3 span{color:var(--muted);font-weight:500}
-.dashboard-detail-group .section-help{margin:6px 0 0}
 .dashboard-chart-row{width:100%;padding:5px 8px;border:1px solid transparent;border-radius:10px;background:transparent;color:inherit;text-align:left;cursor:pointer;transition:background-color .15s,border-color .15s,transform .15s}
 .dashboard-chart-row .chart-bar{background:var(--group-chart-color)}
 .dashboard-chart-row:not(.chart-row-selected){opacity:.72}
@@ -30,9 +26,7 @@ body{min-height:100vh}.hidden{display:none!important}.login-screen{position:fixe
 .donut-chart{background-color:#fff}
 .status-chart-note{min-height:2.6em;margin-bottom:8px}
 .donut-legend strong{color:var(--brand);font-size:14px}
-.dashboard-member-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:6px 18px;margin:4px 0;padding-left:20px}
-.dashboard-member-list li{padding:2px 0}
-@media(max-width:520px){.dashboard-kpi-percent .value{font-size:30px}.dashboard-chart-row.chart-row-selected{transform:none}.dashboard-member-list{grid-template-columns:1fr}}
+@media(max-width:520px){.dashboard-kpi-percent .value{font-size:30px}.dashboard-chart-row.chart-row-selected{transform:none}}
 .member-gender-select{max-width:180px;padding:7px;border:1px solid var(--border);border-radius:8px;background:#fff;color:var(--text);font:inherit;font-size:12px}
 .barcode-preview #member-qrcode canvas,.barcode-preview #member-qrcode img{display:block;width:240px;height:240px;max-width:100%;image-rendering:pixelated}.barcode-preview #barcode-member-caption{margin-top:4px;color:var(--brand);font-size:17px;font-weight:800;text-align:center}
 @media(max-width:600px){
